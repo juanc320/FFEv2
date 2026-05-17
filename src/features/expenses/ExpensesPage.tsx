@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
@@ -63,6 +63,7 @@ export default function ExpensesPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [viewBy, setViewBy] = useState<'category' | 'type' | 'date'>('category')
 
   // Categories + Concepts
   const { data: categories = [] } = useQuery({
@@ -137,6 +138,32 @@ export default function ExpensesPage() {
   const totalBudget = items.reduce((s, i) => s + i.budget_amount + i.arrears_amount, 0)
   const totalExecuted = items.reduce((s, i) => s + i.executed_amount_cached, 0)
 
+  const groups = useMemo(() => {
+    if (viewBy === 'category') {
+      return categories.map(cat => ({
+        id: cat.id,
+        label: cat.name,
+        items: items.filter(i => i.category_id === cat.id)
+      })).filter(g => g.items.length > 0)
+    }
+    if (viewBy === 'type') {
+      return ['fixed', 'variable', 'sporadic'].map(t => ({
+        id: t,
+        label: TYPE_LABELS[t as keyof typeof TYPE_LABELS],
+        items: items.filter(i => i.expense_type === t)
+      })).filter(g => g.items.length > 0)
+    }
+    if (viewBy === 'date') {
+      const dates = Array.from(new Set(items.map(i => i.due_date || 'Sin fecha'))).sort()
+      return dates.map(d => ({
+        id: d,
+        label: d === 'Sin fecha' ? 'Sin fecha límite' : `Fecha de pago: ${d}`,
+        items: items.filter(i => (i.due_date || 'Sin fecha') === d)
+      })).filter(g => g.items.length > 0)
+    }
+    return []
+  }, [items, categories, viewBy])
+
   if (!activeMonth) {
     return (
       <div className="max-w-2xl mx-auto mt-16 card text-center space-y-3">
@@ -151,21 +178,28 @@ export default function ExpensesPage() {
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Gastos presupuestados</h1>
+          <h1 className="text-2xl font-bold text-white">Sobres presupuestados</h1>
           <p className="text-slate-400 text-sm mt-0.5">
             Ejecutado: <span className="text-white font-medium">{formatCOP(totalExecuted)}</span>
             {' '}/ Presupuesto: <span className="text-indigo-400 font-medium">{formatCOP(totalBudget)}</span>
           </p>
         </div>
-        <button className="btn-primary flex items-center gap-2" onClick={() => setShowForm(true)}>
-          <Plus size={16} /> Nuevo gasto
-        </button>
+        <div className="flex flex-col items-end gap-2">
+          <button className="btn-primary flex items-center gap-2" onClick={() => setShowForm(true)}>
+            <Plus size={16} /> Nuevo sobre
+          </button>
+          <select className="input px-2 py-1 text-xs bg-slate-800 border-slate-700 text-slate-300 rounded" value={viewBy} onChange={e => setViewBy(e.target.value as any)}>
+            <option value="category">Por categoría</option>
+            <option value="type">Por tipo</option>
+            <option value="date">Por fecha de pago</option>
+          </select>
+        </div>
       </div>
 
       {/* Formulario */}
       {showForm && (
         <div className="card border-indigo-500/30 space-y-4">
-          <h2 className="text-white font-semibold">Nuevo gasto presupuestado</h2>
+          <h2 className="text-white font-semibold">Nuevo sobre presupuestado</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Categoría</label>
@@ -210,7 +244,7 @@ export default function ExpensesPage() {
           <div className="flex gap-3 justify-end">
             <button className="btn-ghost" onClick={() => setShowForm(false)}>Cancelar</button>
             <button className="btn-primary" disabled={!form.category_id || !form.concept_id || createItem.isPending} onClick={() => createItem.mutate()}>
-              {createItem.isPending ? 'Guardando...' : 'Agregar gasto'}
+              {createItem.isPending ? 'Guardando...' : 'Agregar sobre'}
             </button>
           </div>
         </div>
@@ -220,20 +254,18 @@ export default function ExpensesPage() {
       {isLoading && <div className="card text-center text-slate-500 py-8">Cargando...</div>}
       {!isLoading && items.length === 0 && (
         <div className="card text-center text-slate-500 py-10">
-          <p className="font-medium text-slate-400 mb-1">Sin gastos presupuestados</p>
-          <p className="text-sm">Agrega los gastos del mes con el botón de arriba.</p>
+          <p className="font-medium text-slate-400 mb-1">Sin sobres presupuestados</p>
+          <p className="text-sm">Agrega los sobres del mes con el botón de arriba.</p>
         </div>
       )}
 
-      {categories.map(cat => {
-        const group = items.filter(i => i.category_id === cat.id)
-        if (group.length === 0) return null
+      {groups.map(group => {
         return (
-          <div key={cat.id} className="space-y-3 mt-4">
+          <div key={group.id} className="space-y-3 mt-4">
             <h3 className="text-xs font-semibold uppercase tracking-widest px-1 text-slate-400 border-b border-slate-800 pb-1">
-              {cat.name}
+              {group.label}
             </h3>
-            {group.map(item => {
+            {group.items.map(item => {
               const conName = concepts.find(c => c.id === item.concept_id)?.name ?? ''
               const available = calcEnvelopeAvailable(item.budget_amount, item.arrears_amount, 0, 0, item.executed_amount_cached, item.deferred_amount)
               const pct = item.budget_amount > 0 ? Math.min((item.executed_amount_cached / item.budget_amount) * 100, 100) : 0
