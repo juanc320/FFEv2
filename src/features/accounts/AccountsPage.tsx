@@ -7,6 +7,7 @@ import { Plus, Wallet, Edit2, Trash2, Check, X, AlertTriangle } from 'lucide-rea
 import type { Account, AccountType } from '@/shared/types/database'
 import { formatCOP } from '@/shared/utils/calculations'
 import clsx from 'clsx'
+import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   bank: 'Banco',
@@ -136,7 +137,7 @@ export default function AccountsPage() {
             {!editId && (
               <div>
                 <label className="label">Saldo inicial</label>
-                <input className="input w-full" type="number" min={0} value={form.opening_balance} onChange={e => setForm(f => ({ ...f, opening_balance: Number(e.target.value) }))} />
+                <CurrencyInput className="input w-full" value={form.opening_balance} onChange={val => setForm(f => ({ ...f, opening_balance: val }))} />
               </div>
             )}
           </div>
