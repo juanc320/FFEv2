@@ -317,9 +317,11 @@ export default function ExpensesPage() {
                             {CRITICALITY_LABELS[item.criticality as keyof typeof CRITICALITY_LABELS]}
                           </span>
                         )}
-                        <span className="text-xs px-1.5 py-0.5 rounded border border-slate-700 text-slate-400">
-                          {TYPE_LABELS[item.expense_type as keyof typeof TYPE_LABELS]}
-                        </span>
+                        {isExpanded && (
+                          <span className="text-xs px-1.5 py-0.5 rounded border border-slate-700 text-slate-400">
+                            {TYPE_LABELS[item.expense_type as keyof typeof TYPE_LABELS]}
+                          </span>
+                        )}
                         {(() => {
                           const tag = getStatusTag(item, available)
                           return (
@@ -328,6 +330,12 @@ export default function ExpensesPage() {
                             </span>
                           )
                         })()}
+                        {!isExpanded && item.due_date && (
+                          <span className="text-[11px] text-slate-500 font-medium tracking-wide flex items-center gap-1 ml-1">
+                            <Clock size={11} className="opacity-70" />
+                            {item.due_date.split('-').reverse().slice(0, 2).join('/')}
+                          </span>
+                        )}
                       </div>
                       {/* Progress bar */}
                       <div className="mt-1.5 flex items-center gap-2">
