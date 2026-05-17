@@ -56,7 +56,7 @@ function useDashboardData() {
       if (month) {
         const [expRes, incRes] = await Promise.all([
           db.from('monthly_expense_items').select('*, categories(name), concepts(name)').eq('month_id', month.id).eq('active_in_month', true),
-          db.from('monthly_income_items').select('*').eq('month_id', month.id).eq('active_in_month', true)
+          db.from('monthly_income_items').select('*').eq('month_id', month.id)
         ])
         expenses = expRes.data || []
         incomes = incRes.data || []
