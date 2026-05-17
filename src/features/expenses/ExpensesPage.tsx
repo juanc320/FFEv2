@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
@@ -76,7 +76,13 @@ export default function ExpensesPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [viewBy, setViewBy] = useState<'category' | 'type' | 'date'>('category')
+  const [viewBy, setViewBy] = useState<'category' | 'type' | 'date'>(() => {
+    return (localStorage.getItem('ffev2_expenses_view') as 'category' | 'type' | 'date') || 'category'
+  })
+
+  useEffect(() => {
+    localStorage.setItem('ffev2_expenses_view', viewBy)
+  }, [viewBy])
 
   // Categories + Concepts
   const { data: categories = [] } = useQuery({
@@ -152,18 +158,26 @@ export default function ExpensesPage() {
   const totalExecuted = items.reduce((s, i) => s + i.executed_amount_cached, 0)
 
   const groups = useMemo(() => {
+    // Función para ordenar por fecha (los que no tienen fecha van al final)
+    const sortByDate = (a: MonthlyExpenseItem, b: MonthlyExpenseItem) => {
+      if (!a.due_date && !b.due_date) return 0
+      if (!a.due_date) return 1
+      if (!b.due_date) return -1
+      return a.due_date.localeCompare(b.due_date)
+    }
+
     if (viewBy === 'category') {
       return categories.map(cat => ({
         id: cat.id,
         label: cat.name,
-        items: items.filter(i => i.category_id === cat.id)
+        items: items.filter(i => i.category_id === cat.id).sort(sortByDate)
       })).filter(g => g.items.length > 0)
     }
     if (viewBy === 'type') {
       return ['fixed', 'variable', 'sporadic'].map(t => ({
         id: t,
         label: TYPE_LABELS[t as keyof typeof TYPE_LABELS],
-        items: items.filter(i => i.expense_type === t)
+        items: items.filter(i => i.expense_type === t).sort(sortByDate)
       })).filter(g => g.items.length > 0)
     }
     if (viewBy === 'date') {
