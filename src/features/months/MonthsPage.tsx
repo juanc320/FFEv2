@@ -94,6 +94,14 @@ export default function MonthsPage() {
             const carriesArrears = ['critical', 'necessary'].includes(item.criticality)
             const newArrears = carriesArrears ? shortfall : 0
 
+            let newDueDate = item.due_date
+            if (item.due_date) {
+              const day = parseInt(item.due_date.split('-')[2], 10)
+              const lastDayOfMonth = new Date(year, month, 0).getDate()
+              const validDay = Math.min(day, lastDayOfMonth)
+              newDueDate = `${year}-${String(month).padStart(2, '0')}-${String(validDay).padStart(2, '0')}`
+            }
+
             return {
               family_id: profile!.family_id!,
               month_id: newMonth.id,
@@ -102,7 +110,7 @@ export default function MonthsPage() {
               expense_type: item.expense_type,
               criticality: item.criticality,
               due_mode: item.due_mode,
-              due_date: item.due_date,
+              due_date: newDueDate,
               budget_amount: item.budget_amount,
               arrears_amount: newArrears,
               executed_amount_cached: 0,

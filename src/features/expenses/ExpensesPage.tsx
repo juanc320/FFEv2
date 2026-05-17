@@ -332,12 +332,17 @@ export default function ExpensesPage() {
                             </span>
                           )
                         })()}
-                        {!isExpanded && item.due_date && (
-                          <span className="text-[11px] text-slate-500 font-medium tracking-wide flex items-center gap-1 ml-1">
-                            <Clock size={11} className="opacity-70" />
-                            {item.due_date.split('-').reverse().slice(0, 2).join('/')}
-                          </span>
-                        )}
+                        {!isExpanded && item.due_date && (() => {
+                          const todayStr = new Date().toISOString().split('T')[0]
+                          const isOverdue = item.executed_amount_cached === 0 && item.due_date < todayStr
+                          return (
+                            <span className={clsx("text-[11px] font-medium tracking-wide flex items-center gap-1 ml-1", isOverdue ? "text-red-400" : "text-slate-500")}>
+                              <Clock size={11} className="opacity-70" />
+                              {item.due_date.split('-').reverse().slice(0, 2).join('/')}
+                              {isOverdue && <span className="text-[9px] uppercase px-1 rounded bg-red-500/20 text-red-300">Vencido</span>}
+                            </span>
+                          )
+                        })()}
                       </div>
                       {/* Progress bar */}
                       <div className="mt-1.5 flex items-center gap-2">
