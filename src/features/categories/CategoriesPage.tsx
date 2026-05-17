@@ -62,12 +62,14 @@ export default function CategoriesPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['categories'] }); setEditCat(null) },
   })
 
-  // Desactivar categoría (RN-14: si tiene conceptos con transacciones, solo desactivar)
-  const toggleCat = useMutation({
-    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
-      await db.from('categories').update({ active }).eq('id', id)
+  // Eliminar categoría
+  const deleteCat = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await db.from('categories').delete().eq('id', id)
+      if (error) throw new Error(error.message)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
+    onError: () => alert('No se puede eliminar esta categoría porque ya tiene sobres o movimientos asociados en algún mes.')
   })
 
   // Crear concepto
@@ -89,12 +91,14 @@ export default function CategoriesPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['concepts'] }); setEditCon(null) },
   })
 
-  // Desactivar concepto
-  const toggleConcept = useMutation({
-    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
-      await db.from('concepts').update({ active }).eq('id', id)
+  // Eliminar concepto
+  const deleteConcept = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await db.from('concepts').delete().eq('id', id)
+      if (error) throw new Error(error.message)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['concepts'] }),
+    onError: () => alert('No se puede eliminar este concepto porque ya tiene sobres o movimientos asociados en algún mes.')
   })
 
   const expenseCats = categories.filter(c => c.type === 'expense')
@@ -133,8 +137,8 @@ export default function CategoriesPage() {
         onEditCat={setEditCat} onEditCon={setEditCon}
         onSaveCat={(id, name) => updateCat.mutate({ id, name })}
         onSaveCon={(id, name) => updateConcept.mutate({ id, name })}
-        onToggleCat={(id, active) => toggleCat.mutate({ id, active })}
-        onToggleCon={(id, active) => toggleConcept.mutate({ id, active })}
+        onDeleteCat={(id) => { if (confirm('¿Seguro que deseas eliminar esta categoría permanentemente?')) deleteCat.mutate(id) }}
+        onDeleteCon={(id) => { if (confirm('¿Seguro que deseas eliminar este concepto permanentemente?')) deleteConcept.mutate(id) }}
       />
 
       {/* Lista categorías ingreso */}
@@ -148,15 +152,15 @@ export default function CategoriesPage() {
         onEditCat={setEditCat} onEditCon={setEditCon}
         onSaveCat={(id, name) => updateCat.mutate({ id, name })}
         onSaveCon={(id, name) => updateConcept.mutate({ id, name })}
-        onToggleCat={(id, active) => toggleCat.mutate({ id, active })}
-        onToggleCon={(id, active) => toggleConcept.mutate({ id, active })}
+        onDeleteCat={(id) => { if (confirm('¿Seguro que deseas eliminar esta categoría permanentemente?')) deleteCat.mutate(id) }}
+        onDeleteCon={(id) => { if (confirm('¿Seguro que deseas eliminar este concepto permanentemente?')) deleteConcept.mutate(id) }}
       />
     </div>
   )
 }
 
 function CategorySection({ title, type, categories, concepts, isLoading, expandedCats, newConceptName, editCat, editCon,
-  onToggleExpand, onNewConceptChange, onCreateConcept, onEditCat, onEditCon, onSaveCat, onSaveCon, onToggleCat, onToggleCon }: {
+  onToggleExpand, onNewConceptChange, onCreateConcept, onEditCat, onEditCon, onSaveCat, onSaveCon, onDeleteCat, onDeleteCon }: {
   title: string; type: 'expense' | 'income'
   categories: Category[]; concepts: Concept[]; isLoading: boolean
   expandedCats: Set<string>; newConceptName: Record<string, string>
@@ -168,8 +172,8 @@ function CategorySection({ title, type, categories, concepts, isLoading, expande
   onEditCon: (v: { id: string; name: string } | null) => void
   onSaveCat: (id: string, name: string) => void
   onSaveCon: (id: string, name: string) => void
-  onToggleCat: (id: string, active: boolean) => void
-  onToggleCon: (id: string, active: boolean) => void
+  onDeleteCat: (id: string) => void
+  onDeleteCon: (id: string) => void
 }) {
   const color = type === 'expense' ? 'text-indigo-400' : 'text-emerald-400'
   const bg = type === 'expense' ? 'bg-indigo-500/10 border-indigo-500/20' : 'bg-emerald-500/10 border-emerald-500/20'
@@ -208,7 +212,7 @@ function CategorySection({ title, type, categories, concepts, isLoading, expande
                 ) : (
                   <>
                     <button className="icon-btn text-slate-400 hover:text-white hover:bg-slate-700" onClick={() => onEditCat({ id: cat.id, name: cat.name })}><Edit2 size={13} /></button>
-                    <button className="icon-btn text-slate-400 hover:text-red-400 hover:bg-red-400/10" onClick={() => onToggleCat(cat.id, !cat.active)}><Trash2 size={13} /></button>
+                    <button className="icon-btn text-slate-400 hover:text-red-400 hover:bg-red-400/10" onClick={() => onDeleteCat(cat.id)}><Trash2 size={13} /></button>
                   </>
                 )}
               </div>
@@ -235,7 +239,7 @@ function CategorySection({ title, type, categories, concepts, isLoading, expande
                       ) : (
                         <>
                           <button className="icon-btn text-slate-500 hover:text-white hover:bg-slate-700" onClick={() => onEditCon({ id: con.id, name: con.name })}><Edit2 size={12} /></button>
-                          <button className="icon-btn text-slate-500 hover:text-red-400 hover:bg-red-400/10" onClick={() => onToggleCon(con.id, !con.active)}><Trash2 size={12} /></button>
+                          <button className="icon-btn text-slate-500 hover:text-red-400 hover:bg-red-400/10" onClick={() => onDeleteCon(con.id)}><Trash2 size={12} /></button>
                         </>
                       )}
                     </div>
