@@ -120,6 +120,13 @@ export default function ExpensesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
   })
 
+  const updateDate = useMutation({
+    mutationFn: async ({ id, newDate }: { id: string; newDate: string | null }) => {
+      await db.from('monthly_expense_items').update({ due_date: newDate || null }).eq('id', id)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
+  })
+
   const deferExpense = useMutation({
     mutationFn: async ({ id, newDeferred }: { id: string; newDeferred: number }) => {
       await db.from('monthly_expense_items').update({ deferred_amount: newDeferred }).eq('id', id)
@@ -288,7 +295,15 @@ export default function ExpensesPage() {
                           <p className={clsx('text-sm font-semibold', available <= 0 ? 'text-red-400' : 'text-emerald-400')}>{formatCOP(available)}</p>
                         </div>
                       </div>
-                      {item.due_date && <p className="text-slate-500 text-xs">Fecha límite: {item.due_date}</p>}
+                      <div className="flex items-center gap-2 mt-2">
+                        <label className="text-slate-500 text-xs">Fecha límite:</label>
+                        <input 
+                          type="date" 
+                          className="input px-2 py-1 text-xs h-7 bg-slate-800 border-slate-700 text-slate-300 w-auto" 
+                          value={item.due_date || ''} 
+                          onChange={(e) => updateDate.mutate({ id: item.id, newDate: e.target.value })}
+                        />
+                      </div>
                       <div className="flex justify-end gap-4 mt-2">
                         <button className="text-xs flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors" onClick={() => {
                           const amt = window.prompt(`Nuevo presupuesto para este gasto:`, String(item.budget_amount))
