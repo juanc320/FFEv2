@@ -298,9 +298,11 @@ export default function ExpensesPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-slate-200 text-sm font-medium">{conName}</p>
-                        <span className={clsx('text-xs px-1.5 py-0.5 rounded border', CRITICALITY_COLORS[item.criticality as keyof typeof CRITICALITY_COLORS])}>
-                          {CRITICALITY_LABELS[item.criticality as keyof typeof CRITICALITY_LABELS]}
-                        </span>
+                        {isExpanded && (
+                          <span className={clsx('text-xs px-1.5 py-0.5 rounded border', CRITICALITY_COLORS[item.criticality as keyof typeof CRITICALITY_COLORS])}>
+                            {CRITICALITY_LABELS[item.criticality as keyof typeof CRITICALITY_LABELS]}
+                          </span>
+                        )}
                         <span className="text-xs px-1.5 py-0.5 rounded border border-slate-700 text-slate-400">
                           {TYPE_LABELS[item.expense_type as keyof typeof TYPE_LABELS]}
                         </span>
