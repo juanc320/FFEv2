@@ -19,6 +19,19 @@ const CRITICALITY_COLORS = {
 const CRITICALITY_LABELS = { critical: 'Crítico', necessary: 'Necesario', desirable: 'Deseable', optional: 'Opcional' }
 const TYPE_LABELS = { fixed: 'Fijo', variable: 'Variable', sporadic: 'Esporádico' }
 
+function getStatusTag(item: MonthlyExpenseItem, available: number) {
+  if (item.expense_type === 'variable' || item.expense_type === 'sporadic') {
+    if (available < 0) return { label: 'Sobregirado', color: 'text-red-400 border-red-500/30 bg-red-500/10' }
+    if (available === 0) return { label: 'Agotado', color: 'text-amber-400 border-amber-500/30 bg-amber-500/10' }
+    return { label: 'Disponible', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' }
+  } else {
+    // Fixed obligations
+    if (item.executed_amount_cached > 0) return { label: 'Pagado', color: 'text-violet-400 border-violet-500/30 bg-violet-500/10' }
+    if (item.budget_amount > 0) return { label: 'Listo para pagar', color: 'text-blue-400 border-blue-500/30 bg-blue-500/10' }
+    return { label: 'Pendiente por fondear', color: 'text-slate-400 border-slate-500/30 bg-slate-500/10' }
+  }
+}
+
 function useExpenseItems() {
   const { profile } = useAuth()
   const { data: activeMonth } = useActiveMonth()
@@ -291,6 +304,14 @@ export default function ExpensesPage() {
                         <span className="text-xs px-1.5 py-0.5 rounded border border-slate-700 text-slate-400">
                           {TYPE_LABELS[item.expense_type as keyof typeof TYPE_LABELS]}
                         </span>
+                        {(() => {
+                          const tag = getStatusTag(item, available)
+                          return (
+                            <span className={clsx('text-[10px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider', tag.color)}>
+                              {tag.label}
+                            </span>
+                          )
+                        })()}
                       </div>
                       {/* Progress bar */}
                       <div className="mt-1.5 flex items-center gap-2">
