@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
@@ -89,6 +90,7 @@ const EMPTY_FORM = {
 export default function TransactionsPage() {
   const { profile } = useAuth()
   const qc = useQueryClient()
+  const location = useLocation()
   const { data: activeMonth } = useActiveMonth()
   const { data: transactions = [], isLoading } = useTransactions()
   const { data: accounts = [] } = useAccounts()
@@ -98,6 +100,20 @@ export default function TransactionsPage() {
   const [envelopeAlert, setEnvelopeAlert] = useState<{ shortfall: number; itemId: string } | null>(null)
   const [filterType, setFilterType] = useState<string>('all')
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (location.state?.prefillExpenseId) {
+      setShowForm(true)
+      setForm(f => ({
+        ...f,
+        mode: 'expense',
+        category_id: location.state.prefillCategoryId,
+        concept_id: location.state.prefillConceptId,
+        expense_item_id: location.state.prefillExpenseId
+      }))
+      window.history.replaceState({}, document.title)
+    }
+  }, [location.state])
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories', profile?.family_id],

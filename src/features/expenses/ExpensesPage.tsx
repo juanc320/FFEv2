@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
@@ -69,6 +70,7 @@ const EMPTY: {
 }
 
 export default function ExpensesPage() {
+  const navigate = useNavigate()
   const { profile } = useAuth()
   const qc = useQueryClient()
   const { data: activeMonth } = useActiveMonth()
@@ -382,6 +384,17 @@ export default function ExpensesPage() {
                         />
                       </div>
                       <div className="flex justify-end gap-4 mt-2">
+                        <button className="text-xs flex items-center gap-1 text-emerald-400 hover:text-emerald-300 transition-colors" onClick={() => {
+                          navigate('/transactions', { 
+                            state: { 
+                              prefillExpenseId: item.id, 
+                              prefillCategoryId: item.category_id, 
+                              prefillConceptId: item.concept_id 
+                            } 
+                          })
+                        }}>
+                          <Plus size={14} /> Registrar pago
+                        </button>
                         <button className="text-xs flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors" onClick={() => {
                           const amt = window.prompt(`Nuevo presupuesto para este gasto:`, String(item.budget_amount))
                           if (amt !== null && !isNaN(Number(amt.replace(/\D/g, '')))) {
