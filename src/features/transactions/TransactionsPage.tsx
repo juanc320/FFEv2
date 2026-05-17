@@ -6,7 +6,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { useActiveMonth } from '@/features/months/MonthsPage'
 import type { Transaction, Account, MonthlyExpenseItem, Category, Concept } from '@/shared/types/database'
 import { formatCOP, calc4x1000, calcEnvelopeAvailable } from '@/shared/utils/calculations'
-import { Plus, ArrowLeftRight, TrendingUp, TrendingDown, AlertTriangle, Zap } from 'lucide-react'
+import { Plus, ArrowLeftRight, TrendingUp, TrendingDown, AlertTriangle, Zap, Trash2, ChevronDown } from 'lucide-react'
 import clsx from 'clsx'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
@@ -97,6 +97,7 @@ export default function TransactionsPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [envelopeAlert, setEnvelopeAlert] = useState<{ shortfall: number; itemId: string } | null>(null)
   const [filterType, setFilterType] = useState<string>('all')
+  const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories', profile?.family_id],
@@ -206,6 +207,43 @@ export default function TransactionsPage() {
       setEnvelopeAlert(null)
     },
     onError: (e) => { if ((e as Error).message !== 'envelope_insufficient') alert('Error: ' + (e as Error).message) },
+  })
+
+  const updateTx = useMutation({
+    mutationFn: async ({ id, note, date }: { id: string; note: string; date: string }) => {
+      await db.from('transactions').update({ note: note || null, date }).eq('id', id)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] })
+  })
+
+  const deleteTx = useMutation({
+    mutationFn: async (tx: Transaction) => {
+      if (tx.source_account_id) {
+        const src = accounts.find(a => a.id === tx.source_account_id)
+        if (src) await db.from('accounts').update({ current_balance_cached: src.current_balance_cached + tx.amount + tx.tax_amount }).eq('id', src.id)
+      }
+      if (tx.destination_account_id) {
+        const dst = accounts.find(a => a.id === tx.destination_account_id)
+        if (dst) {
+          if (tx.type === 'transfer_internal' || tx.type === 'income') {
+             await db.from('accounts').update({ current_balance_cached: dst.current_balance_cached - tx.amount }).eq('id', dst.id)
+          }
+        }
+      }
+      if (tx.expense_item_id && tx.type === 'expense') {
+        const item = expenseItems.find(i => i.id === tx.expense_item_id)
+        if (item) await db.from('monthly_expense_items').update({ executed_amount_cached: item.executed_amount_cached - tx.amount }).eq('id', item.id)
+      }
+      if (tx.tax_amount > 0) {
+        await db.from('transactions').delete().eq('parent_transaction_id', tx.id)
+      }
+      await db.from('transactions').delete().eq('id', tx.id)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
+      qc.invalidateQueries({ queryKey: ['expense_items'] })
+    }
   })
 
   const filtered = filterType === 'all' ? transactions : transactions.filter(t => t.type === filterType)
@@ -396,22 +434,70 @@ export default function TransactionsPage() {
           const dstAcc = accounts.find(a => a.id === tx.destination_account_id)?.name
           const isDebit = ['expense', 'transfer_external_out', 'tax_4x1000', 'adjustment'].includes(tx.type)
           return (
-            <div key={tx.id} className={clsx('flex items-center gap-4 px-4 py-3 rounded-xl border', tx.is_automatic ? 'bg-amber-500/5 border-amber-500/20' : 'bg-slate-800/40 border-slate-700/40')}>
-              <div className="flex-shrink-0">{TX_ICON[tx.type]}</div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-slate-200 text-sm font-medium">
-                    {tx.note ?? conName ?? MODE_LABELS[tx.type as TxMode] ?? tx.type}
+            <div key={tx.id} className="card p-0 overflow-hidden">
+              <div 
+                className={clsx('flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-slate-800/30 transition-colors', tx.is_automatic ? 'bg-amber-500/5' : '')}
+                onClick={() => setExpandedTxId(expandedTxId === tx.id ? null : tx.id)}
+              >
+                <div className="flex-shrink-0">{TX_ICON[tx.type]}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-slate-200 text-sm font-medium">
+                      {tx.note ?? conName ?? MODE_LABELS[tx.type as TxMode] ?? tx.type}
+                    </p>
+                    {tx.is_automatic && <span className="text-xs px-1.5 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded">Auto</span>}
+                  </div>
+                  <p className="text-slate-500 text-xs mt-0.5">
+                    {tx.date} {srcAcc && `· ${srcAcc}`}{dstAcc && ` → ${dstAcc}`}{catName && ` · ${catName}`}
                   </p>
-                  {tx.is_automatic && <span className="text-xs px-1.5 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded">Auto</span>}
                 </div>
-                <p className="text-slate-500 text-xs mt-0.5">
-                  {tx.date} {srcAcc && `· ${srcAcc}`}{dstAcc && ` → ${dstAcc}`}{catName && ` · ${catName}`}
-                </p>
+                <div className="text-right flex-shrink-0 flex items-center gap-3">
+                  <p className={clsx('font-semibold text-sm', isDebit ? 'text-red-400' : 'text-emerald-400')}>
+                    {isDebit ? '-' : '+'}{formatCOP(tx.amount)}
+                  </p>
+                  <ChevronDown size={15} className={clsx('text-slate-500 transition-transform', expandedTxId === tx.id && 'rotate-180')} />
+                </div>
               </div>
-              <p className={clsx('font-semibold text-sm flex-shrink-0', isDebit ? 'text-red-400' : 'text-emerald-400')}>
-                {isDebit ? '-' : '+'}{formatCOP(tx.amount)}
-              </p>
+
+              {expandedTxId === tx.id && (
+                <div className="border-t border-slate-800 px-4 py-3 bg-slate-900/50 space-y-3">
+                  {!tx.is_automatic ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs text-slate-500 block mb-1">Fecha</label>
+                          <input type="date" className="input w-full px-2 py-1.5 text-xs h-8 bg-slate-800 border-slate-700 text-slate-300" 
+                            defaultValue={tx.date} 
+                            onChange={(e) => updateTx.mutate({ id: tx.id, note: tx.note || '', date: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-500 block mb-1">Nota</label>
+                          <input type="text" className="input w-full px-2 py-1.5 text-xs h-8 bg-slate-800 border-slate-700 text-slate-300" 
+                            defaultValue={tx.note || ''} 
+                            onBlur={(e) => updateTx.mutate({ id: tx.id, note: e.target.value, date: tx.date })}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end pt-1">
+                        <button 
+                          className="text-xs flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm('¿Seguro que deseas eliminar este movimiento?\nEl dinero será devuelto a tu cuenta y sobre correspondiente.')) {
+                              deleteTx.mutate(tx)
+                            }
+                          }}
+                        >
+                          <Trash2 size={14} /> Eliminar movimiento
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-amber-400/80 italic text-center">Los movimientos automáticos (como el 4x1000) no se pueden editar directamente. Se eliminarán si eliminas el movimiento original que los generó.</p>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
