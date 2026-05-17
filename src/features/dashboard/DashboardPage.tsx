@@ -109,7 +109,7 @@ function useDashboardData() {
 
       // Income calculation
       const pendingIncomeItems = incomes.map(inc => {
-        const expected = Number((inc as any).net_expected_amount || (inc as any).expected_amount) || 0
+        const expected = Number((inc as any).net_expected) || 0
         let received = 0
         ;(allTransactions || []).forEach((t: Transaction) => {
           if (t.income_item_id === inc.id && t.month_id === month?.id && t.type === 'income') {
