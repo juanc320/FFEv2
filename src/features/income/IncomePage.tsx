@@ -8,6 +8,7 @@ import type { MonthlyIncomeItem, DeductionType } from '@/shared/types/database'
 import { formatCOP, calcNetIncome } from '@/shared/utils/calculations'
 import { Plus, TrendingUp, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
 import clsx from 'clsx'
+import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
 const DEDUCTION_PRESETS = [
   { label: '8%', rate: 0.08 },
@@ -122,7 +123,7 @@ export default function IncomePage() {
             </div>
             <div>
               <label className="label">Bruto</label>
-              <input type="number" min={0} className="input w-full" value={form.gross_amount} onChange={e => setForm(f => ({ ...f, gross_amount: Number(e.target.value) }))} />
+              <CurrencyInput className="input w-full" value={form.gross_amount} onChange={val => setForm(f => ({ ...f, gross_amount: val }))} />
             </div>
             <div>
               <label className="label">Tipo de deducción</label>
@@ -149,7 +150,7 @@ export default function IncomePage() {
             {(form.deduction_type === 'fixed' || form.deduction_type === 'both') && (
               <div>
                 <label className="label">Deducción fija</label>
-                <input type="number" min={0} className="input w-full" value={form.deduction_amount} onChange={e => setForm(f => ({ ...f, deduction_amount: Number(e.target.value) }))} />
+                <CurrencyInput className="input w-full" value={form.deduction_amount} onChange={val => setForm(f => ({ ...f, deduction_amount: val }))} />
               </div>
             )}
             <div>
@@ -235,7 +236,7 @@ function IncomeCard({ item, onMarkReceived }: { item: MonthlyIncomeItem; onMarkR
         <div className="border-t border-slate-800 px-4 py-3 bg-slate-900/50 flex items-center gap-3">
           <div className="flex-1">
             <label className="label text-xs">Monto recibido neto</label>
-            <input type="number" min={0} className="input w-full py-2" value={amount} onChange={e => setAmount(Number(e.target.value))} />
+            <CurrencyInput className="input w-full py-2" value={amount} onChange={val => setAmount(val)} />
           </div>
           <div className="flex gap-2 pt-5">
             <button className="btn-ghost text-sm py-2" onClick={() => setReceiving(false)}>Cancelar</button>

@@ -8,6 +8,7 @@ import type { Transaction, Account, MonthlyExpenseItem, Category, Concept } from
 import { formatCOP, calc4x1000, calcEnvelopeAvailable } from '@/shared/utils/calculations'
 import { Plus, ArrowLeftRight, TrendingUp, TrendingDown, AlertTriangle, Zap } from 'lucide-react'
 import clsx from 'clsx'
+import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
 type TxMode = 'expense' | 'income' | 'transfer_internal' | 'transfer_external_in' | 'transfer_external_out' | 'adjustment'
 
@@ -249,7 +250,7 @@ export default function TransactionsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Monto</label>
-              <input type="number" min={0} className="input w-full" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))} />
+              <CurrencyInput className="input w-full" value={form.amount} onChange={val => setForm(f => ({ ...f, amount: val }))} />
             </div>
             <div>
               <label className="label">Fecha</label>

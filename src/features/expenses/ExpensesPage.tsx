@@ -6,8 +6,9 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { useActiveMonth } from '@/features/months/MonthsPage'
 import type { MonthlyExpenseItem, Category, Concept } from '@/shared/types/database'
 import { formatCOP, calcEnvelopeAvailable } from '@/shared/utils/calculations'
-import { Plus, AlertTriangle, CheckCircle, Clock, ChevronDown } from 'lucide-react'
+import { Plus, AlertTriangle, CheckCircle, Clock, ChevronDown, Edit2, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
+import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
 const CRITICALITY_COLORS = {
   critical: 'text-red-400 bg-red-500/15 border-red-500/30',
@@ -105,6 +106,20 @@ export default function ExpensesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
   })
 
+  const deleteItem = useMutation({
+    mutationFn: async (id: string) => {
+      await db.from('monthly_expense_items').delete().eq('id', id)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
+  })
+
+  const updateBudget = useMutation({
+    mutationFn: async ({ id, newBudget }: { id: string; newBudget: number }) => {
+      await db.from('monthly_expense_items').update({ budget_amount: newBudget }).eq('id', id)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
+  })
+
   const deferExpense = useMutation({
     mutationFn: async ({ id, newDeferred }: { id: string; newDeferred: number }) => {
       await db.from('monthly_expense_items').update({ deferred_amount: newDeferred }).eq('id', id)
@@ -178,7 +193,7 @@ export default function ExpensesPage() {
             </div>
             <div>
               <label className="label">Presupuesto</label>
-              <input type="number" min={0} className="input w-full" value={form.budget_amount} onChange={e => setForm(f => ({ ...f, budget_amount: Number(e.target.value) }))} />
+              <CurrencyInput className="input w-full" value={form.budget_amount} onChange={val => setForm(f => ({ ...f, budget_amount: val }))} />
             </div>
             <div>
               <label className="label">Fecha límite (opcional)</label>
@@ -203,16 +218,15 @@ export default function ExpensesPage() {
         </div>
       )}
 
-      {['critical', 'necessary', 'desirable', 'optional'].map(crit => {
-        const group = items.filter(i => i.criticality === crit)
+      {categories.map(cat => {
+        const group = items.filter(i => i.category_id === cat.id)
         if (group.length === 0) return null
         return (
-          <div key={crit} className="space-y-2">
-            <h3 className={clsx('text-xs font-semibold uppercase tracking-widest px-1', CRITICALITY_COLORS[crit as keyof typeof CRITICALITY_COLORS].split(' ')[0])}>
-              {CRITICALITY_LABELS[crit as keyof typeof CRITICALITY_LABELS]}
+          <div key={cat.id} className="space-y-3 mt-4">
+            <h3 className="text-xs font-semibold uppercase tracking-widest px-1 text-slate-400 border-b border-slate-800 pb-1">
+              {cat.name}
             </h3>
             {group.map(item => {
-              const catName = categories.find(c => c.id === item.category_id)?.name ?? ''
               const conName = concepts.find(c => c.id === item.concept_id)?.name ?? ''
               const available = calcEnvelopeAvailable(item.budget_amount, item.arrears_amount, 0, 0, item.executed_amount_cached, item.deferred_amount)
               const pct = item.budget_amount > 0 ? Math.min((item.executed_amount_cached / item.budget_amount) * 100, 100) : 0
@@ -232,8 +246,12 @@ export default function ExpensesPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-slate-200 text-sm font-medium">{conName}</p>
-                        <span className="text-slate-500 text-xs">· {catName}</span>
-                        <span className={clsx('text-xs px-1.5 py-0.5 rounded border', CRITICALITY_COLORS[item.criticality])}>{TYPE_LABELS[item.expense_type]}</span>
+                        <span className={clsx('text-xs px-1.5 py-0.5 rounded border', CRITICALITY_COLORS[item.criticality as keyof typeof CRITICALITY_COLORS])}>
+                          {CRITICALITY_LABELS[item.criticality as keyof typeof CRITICALITY_LABELS]}
+                        </span>
+                        <span className="text-xs px-1.5 py-0.5 rounded border border-slate-700 text-slate-400">
+                          {TYPE_LABELS[item.expense_type as keyof typeof TYPE_LABELS]}
+                        </span>
                       </div>
                       {/* Progress bar */}
                       <div className="mt-1.5 flex items-center gap-2">
@@ -271,15 +289,27 @@ export default function ExpensesPage() {
                         </div>
                       </div>
                       {item.due_date && <p className="text-slate-500 text-xs">Fecha límite: {item.due_date}</p>}
-                      <div className="flex justify-end gap-4">
-                        <button className="text-xs text-amber-400 hover:text-amber-300 transition-colors" onClick={() => {
-                          const amt = window.prompt(`Monto a diferir (actual: ${item.deferred_amount}).\\nEsto reduce el monto a pagar este mes sin generar mora en el siguiente.`, String(item.deferred_amount))
-                          if (amt !== null && !isNaN(Number(amt))) deferExpense.mutate({ id: item.id, newDeferred: Number(amt) })
+                      <div className="flex justify-end gap-4 mt-2">
+                        <button className="text-xs flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors" onClick={() => {
+                          const amt = window.prompt(`Nuevo presupuesto para este gasto:`, String(item.budget_amount))
+                          if (amt !== null && !isNaN(Number(amt.replace(/\D/g, '')))) {
+                             updateBudget.mutate({ id: item.id, newBudget: Number(amt.replace(/\D/g, '')) })
+                          }
                         }}>
-                          Diferir
+                          <Edit2 size={14} /> Editar
                         </button>
-                        <button className="text-xs text-red-400 hover:text-red-300 transition-colors" onClick={() => deactivateItem.mutate(item.id)}>
-                          Quitar del mes
+                        <button className="text-xs flex items-center gap-1 text-amber-400 hover:text-amber-300 transition-colors" onClick={() => {
+                          const amt = window.prompt(`Monto a diferir (actual: ${item.deferred_amount}).\nEsto reduce el monto a pagar este mes sin generar mora en el siguiente.`, String(item.deferred_amount))
+                          if (amt !== null && !isNaN(Number(amt.replace(/\D/g, '')))) deferExpense.mutate({ id: item.id, newDeferred: Number(amt.replace(/\D/g, '')) })
+                        }}>
+                          <Clock size={14} /> Diferir
+                        </button>
+                        <button className="text-xs flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors" onClick={() => {
+                          if (window.confirm('¿Seguro que deseas eliminar este gasto del mes?')) {
+                            deleteItem.mutate(item.id)
+                          }
+                        }}>
+                          <Trash2 size={14} /> Eliminar
                         </button>
                       </div>
                     </div>
