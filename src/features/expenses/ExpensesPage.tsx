@@ -81,6 +81,7 @@ export default function ExpensesPage() {
   const [viewBy, setViewBy] = useState<'category' | 'type' | 'date'>(() => {
     return (localStorage.getItem('ffev2_expenses_view') as 'category' | 'type' | 'date') || 'category'
   })
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending'>('all')
 
   useEffect(() => {
     localStorage.setItem('ffev2_expenses_view', viewBy)
@@ -165,6 +166,27 @@ export default function ExpensesPage() {
   const totalBudget = items.reduce((s, i) => s + i.budget_amount + i.arrears_amount, 0)
   const totalExecuted = items.reduce((s, i) => s + i.executed_amount_cached, 0)
 
+  const isPendingOrAvailable = (item: MonthlyExpenseItem) => {
+    if (item.expense_type === 'variable' || item.expense_type === 'sporadic') {
+      const available = calcEnvelopeAvailable(item.budget_amount, item.arrears_amount, 0, 0, item.executed_amount_cached, item.deferred_amount)
+      return available > 0
+    } else {
+      // Fixed obligations: pending if executed_amount_cached === 0
+      return item.executed_amount_cached === 0
+    }
+  }
+
+  const filteredItems = useMemo(() => {
+    return filterStatus === 'all' ? items : items.filter(isPendingOrAvailable)
+  }, [items, filterStatus])
+
+  const filteredPendingTotal = useMemo(() => {
+    return filteredItems.reduce((s, i) => {
+      const avail = calcEnvelopeAvailable(i.budget_amount, i.arrears_amount, 0, 0, i.executed_amount_cached, i.deferred_amount)
+      return s + Math.max(0, avail)
+    }, 0)
+  }, [filteredItems])
+
   const groups = useMemo(() => {
     // Función para ordenar por fecha (los que no tienen fecha van al final)
     const sortByDate = (a: MonthlyExpenseItem, b: MonthlyExpenseItem) => {
@@ -178,33 +200,33 @@ export default function ExpensesPage() {
       return categories.map(cat => ({
         id: cat.id,
         label: cat.name,
-        items: items.filter(i => i.category_id === cat.id).sort(sortByDate)
+        items: filteredItems.filter(i => i.category_id === cat.id).sort(sortByDate)
       })).filter(g => g.items.length > 0)
     }
     if (viewBy === 'type') {
       return ['fixed', 'variable', 'sporadic'].map(t => ({
         id: t,
         label: TYPE_LABELS[t as keyof typeof TYPE_LABELS],
-        items: items.filter(i => i.expense_type === t).sort(sortByDate)
+        items: filteredItems.filter(i => i.expense_type === t).sort(sortByDate)
       })).filter(g => g.items.length > 0)
     }
     if (viewBy === 'date') {
-      const dates = Array.from(new Set(items.map(i => i.due_date || 'Sin fecha'))).sort()
+      const dates = Array.from(new Set(filteredItems.map(i => i.due_date || 'Sin fecha'))).sort()
       return dates.map(d => ({
         id: d,
         label: d === 'Sin fecha' ? 'Sin fecha límite' : `Fecha de pago: ${d}`,
-        items: items.filter(i => (i.due_date || 'Sin fecha') === d)
+        items: filteredItems.filter(i => (i.due_date || 'Sin fecha') === d)
       })).filter(g => g.items.length > 0)
     }
     if (viewBy === 'criticality') {
       return ['critical', 'necessary', 'desirable', 'optional'].map(c => ({
         id: c,
         label: CRITICALITY_LABELS[c as keyof typeof CRITICALITY_LABELS],
-        items: items.filter(i => i.criticality === c).sort(sortByDate)
+        items: filteredItems.filter(i => i.criticality === c).sort(sortByDate)
       })).filter(g => g.items.length > 0)
     }
     return []
-  }, [items, categories, viewBy])
+  }, [filteredItems, categories, viewBy])
 
   if (!activeMonth) {
     return (
@@ -222,20 +244,35 @@ export default function ExpensesPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Plan de gastos</h1>
           <p className="text-slate-400 text-sm mt-0.5">
-            Ejecutado: <span className="text-white font-medium">{formatCOP(totalExecuted)}</span>
-            {' '}/ Presupuesto: <span className="text-indigo-400 font-medium">{formatCOP(totalBudget)}</span>
+            {filterStatus === 'all' ? (
+              <>
+                Ejecutado: <span className="text-white font-medium">{formatCOP(totalExecuted)}</span>
+                {' '}/ Presupuesto: <span className="text-indigo-400 font-medium">{formatCOP(totalBudget)}</span>
+              </>
+            ) : (
+              <>
+                {filteredItems.length} {filteredItems.length === 1 ? 'gasto pendiente' : 'gastos pendientes'}
+                <span className="text-amber-400 font-medium"> · Total por pagar/disponible: {formatCOP(filteredPendingTotal)}</span>
+              </>
+            )}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
           <button className="btn-primary flex items-center gap-2" onClick={() => setShowForm(true)}>
             <Plus size={16} /> Nuevo gasto
           </button>
-          <select className="input px-2 py-1 text-xs bg-slate-800 border-slate-700 text-slate-300 rounded" value={viewBy} onChange={e => setViewBy(e.target.value as any)}>
-            <option value="category">Por categoría</option>
-            <option value="type">Por tipo</option>
-            <option value="criticality">Por criticidad</option>
-            <option value="date">Por fecha de pago</option>
-          </select>
+          <div className="flex items-center gap-2">
+            <select className="input px-2 py-1 text-xs bg-slate-800 border-slate-700 text-slate-300 rounded" value={viewBy} onChange={e => setViewBy(e.target.value as any)}>
+              <option value="category">Por categoría</option>
+              <option value="type">Por tipo</option>
+              <option value="criticality">Por criticidad</option>
+              <option value="date">Por fecha de pago</option>
+            </select>
+            <select className="input px-2 py-1 text-xs bg-slate-800 border-slate-700 text-slate-300 rounded" value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)}>
+              <option value="all">Todos los gastos</option>
+              <option value="pending">Solo pendientes / disponibles</option>
+            </select>
+          </div>
         </div>
       </div>
 
