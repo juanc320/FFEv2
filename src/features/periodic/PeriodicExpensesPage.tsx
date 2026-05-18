@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
 import { useAuth } from '@/features/auth/AuthContext'
-import { Plus, RefreshCw, Trash2, AlertTriangle } from 'lucide-react'
+import { Plus, RefreshCw, Trash2, ChevronDown, Check } from 'lucide-react'
 import type { Category, Concept } from '@/shared/types/database'
 import { formatCOP } from '@/shared/utils/calculations'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
@@ -67,6 +67,8 @@ export default function PeriodicExpensesPage() {
   const qc = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<Record<string, any>>({})
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['periodic_expenses', profile?.family_id],
@@ -115,6 +117,23 @@ export default function PeriodicExpensesPage() {
       await db.from('periodic_expenses').update({ active: false }).eq('id', id)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['periodic_expenses'] }),
+  })
+
+  const updateItem = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      await db.from('periodic_expenses').update({
+        label: data.label,
+        category_id: data.category_id || null,
+        concept_id: data.concept_id || null,
+        amount: data.amount,
+        periodicity: data.periodicity,
+        start_month: data.start_month,
+        start_year: data.start_year,
+        criticality: data.criticality,
+        due_day: data.due_day || null,
+      }).eq('id', id)
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['periodic_expenses'] }); setExpandedId(null) },
   })
 
   const totalAnnual = items.reduce((s: number, i: any) => {
@@ -242,7 +261,26 @@ export default function PeriodicExpensesPage() {
           const annualCost = item.amount * mult
           return (
             <div key={item.id} className="card p-0 overflow-hidden">
-              <div className="flex items-center gap-4 px-4 py-3">
+              {/* Header del card */}
+              <div
+                className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-slate-800/30 transition-colors"
+                onClick={() => {
+                  if (expandedId !== item.id) {
+                    setEditForm({
+                      label: item.label,
+                      category_id: item.category_id || '',
+                      concept_id: item.concept_id || '',
+                      amount: item.amount,
+                      periodicity: item.periodicity,
+                      start_month: item.start_month,
+                      start_year: item.start_year,
+                      criticality: item.criticality,
+                      due_day: item.due_day || '',
+                    })
+                  }
+                  setExpandedId(expandedId === item.id ? null : item.id)
+                }}
+              >
                 <div className={clsx('flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center border', PERIODICITY_BADGE[item.periodicity as keyof typeof PERIODICITY_BADGE])}>
                   <RefreshCw size={16} />
                 </div>
@@ -261,13 +299,85 @@ export default function PeriodicExpensesPage() {
                   <p className="text-white font-semibold text-sm">{formatCOP(item.amount)}</p>
                   <p className="text-slate-500 text-xs">por pago</p>
                 </div>
-                <button
-                  className="icon-btn text-slate-500 hover:text-red-400 hover:bg-red-400/10"
-                  onClick={() => { if (confirm(`¿Eliminar "${item.label}"?`)) deleteItem.mutate(item.id) }}
-                >
-                  <Trash2 size={14} />
-                </button>
+                <ChevronDown size={15} className={clsx('text-slate-500 transition-transform flex-shrink-0', expandedId === item.id && 'rotate-180')} />
               </div>
+
+              {/* Panel de edición */}
+              {expandedId === item.id && (
+                <div className="border-t border-slate-800 px-4 py-4 bg-slate-900/50 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="label">Nombre</label>
+                      <input className="input w-full" value={editForm.label || ''} onChange={e => setEditForm(f => ({ ...f, label: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="label">Categoría</label>
+                      <select className="input w-full" value={editForm.category_id || ''} onChange={e => setEditForm(f => ({ ...f, category_id: e.target.value, concept_id: '' }))}>
+                        <option value="">Sin categoría</option>
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Concepto</label>
+                      <select className="input w-full" value={editForm.concept_id || ''} onChange={e => setEditForm(f => ({ ...f, concept_id: e.target.value }))} disabled={!editForm.category_id}>
+                        <option value="">Sin concepto</option>
+                        {concepts.filter(c => c.category_id === editForm.category_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Monto</label>
+                      <CurrencyInput className="input w-full" value={editForm.amount || 0} onChange={val => setEditForm(f => ({ ...f, amount: val }))} />
+                    </div>
+                    <div>
+                      <label className="label">Periodicidad</label>
+                      <select className="input w-full" value={editForm.periodicity || 'annual'} onChange={e => setEditForm(f => ({ ...f, periodicity: e.target.value }))}>
+                        <option value="quarterly">Trimestral</option>
+                        <option value="semi_annual">Semestral</option>
+                        <option value="annual">Anual</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Mes de inicio</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <select className="input w-full" value={editForm.start_month || 1} onChange={e => setEditForm(f => ({ ...f, start_month: Number(e.target.value) }))}>
+                          {MONTH_NAMES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                        </select>
+                        <select className="input w-full" value={editForm.start_year || now.getFullYear()} onChange={e => setEditForm(f => ({ ...f, start_year: Number(e.target.value) }))}>
+                          {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label">Criticidad</label>
+                      <select className="input w-full" value={editForm.criticality || 'necessary'} onChange={e => setEditForm(f => ({ ...f, criticality: e.target.value }))}>
+                        {Object.entries(CRITICALITY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Día del mes (opcional)</label>
+                      <input type="number" min={1} max={31} className="input w-full" placeholder="Ej: 15" value={editForm.due_day || ''} onChange={e => setEditForm(f => ({ ...f, due_day: e.target.value ? Number(e.target.value) : '' }))} />
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center pt-1">
+                    <button
+                      className="text-xs flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors"
+                      onClick={() => { if (confirm(`¿Eliminar "${item.label}"?`)) deleteItem.mutate(item.id) }}
+                    >
+                      <Trash2 size={13} /> Eliminar
+                    </button>
+                    <div className="flex gap-2">
+                      <button className="btn-ghost text-sm py-1.5 px-3" onClick={() => setExpandedId(null)}>Cancelar</button>
+                      <button
+                        className="btn-primary text-sm py-1.5 px-3 flex items-center gap-1"
+                        disabled={updateItem.isPending}
+                        onClick={() => updateItem.mutate({ id: item.id, data: editForm })}
+                      >
+                        <Check size={13} /> {updateItem.isPending ? 'Guardando...' : 'Guardar'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )
         })}
