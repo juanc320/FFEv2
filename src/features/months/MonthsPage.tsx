@@ -77,11 +77,12 @@ export default function MonthsPage() {
       if (error) throw error
 
       if (prevMonthId && newMonth) {
-        // Fetch items from prev month
+        // Fetch items from prev month — excluir los pospuestos (tienen su propio flujo)
         const { data: prevItems } = await db.from('monthly_expense_items')
           .select('*')
           .eq('month_id', prevMonthId)
           .eq('active_in_month', true)
+          .eq('postponed', false)
         
         if (prevItems && prevItems.length > 0) {
           const newItems = prevItems.map((item: any) => {
@@ -90,9 +91,9 @@ export default function MonthsPage() {
             const target = (item.budget_amount || 0) + (item.arrears_amount || 0)
             const shortfall = Math.max(0, target - executed - deferred)
             
-            // RN-mora: Solo los gastos Fijos (Facturas/Obligaciones) que son críticos o necesarios generan Mora. 
-            // Los Variables (Proyecciones de consumo) asumen el sobrante como ahorro y no generan deuda.
-            const carriesArrears = item.expense_type === 'fixed' && ['critical', 'necessary'].includes(item.criticality)
+            // RN-mora v2: Solo los gastos Variables son ahorro (no generan mora).
+            // Fijos y Esporádicos siempre generan mora si quedan sin pagar.
+            const carriesArrears = item.expense_type !== 'variable'
             const newArrears = carriesArrears ? shortfall : 0
 
             let newDueDate = item.due_date
@@ -117,11 +118,49 @@ export default function MonthsPage() {
               executed_amount_cached: 0,
               deferred_amount: 0,
               status: 'pending',
-              active_in_month: true
+              active_in_month: true,
+              postponed: false,
+              is_mora_item: false,
             }
           })
           
           await db.from('monthly_expense_items').insert(newItems)
+        }
+
+        // Gastos pospuestos: crear ítem "- Mora" separado en el nuevo mes
+        const { data: postponedItems } = await db.from('monthly_expense_items')
+          .select('*')
+          .eq('month_id', prevMonthId)
+          .eq('active_in_month', true)
+          .eq('postponed', true)
+
+        if (postponedItems && postponedItems.length > 0) {
+          const moraItems = postponedItems.map((item: any) => {
+            const unpaid = Math.max(0, (item.budget_amount + item.arrears_amount) - item.executed_amount_cached)
+            const dueDate = `${year}-${String(month).padStart(2, '0')}-01`
+            return {
+              family_id: profile!.family_id!,
+              month_id: newMonth.id,
+              category_id: item.category_id,
+              concept_id: item.concept_id,
+              expense_type: 'fixed',
+              criticality: 'critical',
+              due_mode: 'exact',
+              due_date: dueDate,
+              budget_amount: unpaid,
+              arrears_amount: 0,
+              executed_amount_cached: 0,
+              deferred_amount: 0,
+              status: 'pending',
+              active_in_month: true,
+              postponed: false,
+              is_mora_item: true,
+            }
+          }).filter((i: any) => i.budget_amount > 0)
+
+          if (moraItems.length > 0) {
+            await db.from('monthly_expense_items').insert(moraItems)
+          }
         }
       }
 

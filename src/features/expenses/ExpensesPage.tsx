@@ -156,6 +156,18 @@ export default function ExpensesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
   })
 
+  const postponeItem = useMutation({
+    mutationFn: async (item: MonthlyExpenseItem) => {
+      // Marcar como pospuesto: desaparece de este mes y genera ítem de mora en el siguiente
+      const pending = Math.max(0, (item.budget_amount + item.arrears_amount) - item.executed_amount_cached)
+      await db.from('monthly_expense_items').update({ 
+        postponed: true,
+        deferred_amount: pending  // hacer que el disponible = 0 en este mes
+      }).eq('id', item.id)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
+  })
+
   const totalBudget = items.reduce((s, i) => s + i.budget_amount + i.arrears_amount, 0)
   const totalExecuted = items.reduce((s, i) => s + i.executed_amount_cached, 0)
 
@@ -308,20 +320,27 @@ export default function ExpensesPage() {
               const pct = item.budget_amount > 0 ? Math.min((item.executed_amount_cached / item.budget_amount) * 100, 100) : 0
               const isExpanded = expandedId === item.id
               return (
-                <div key={item.id} className="card p-0 overflow-hidden">
+                <div key={item.id} className={clsx('card p-0 overflow-hidden', (item as any).postponed && 'opacity-60', (item as any).is_mora_item && 'border-red-500/40')}>
                   <div
                     className="flex items-center gap-4 px-4 py-3.5 cursor-pointer hover:bg-slate-800/30 transition-colors"
                     onClick={() => setExpandedId(isExpanded ? null : item.id)}
                   >
-                    {item.status === 'paid'
-                      ? <CheckCircle size={16} className="text-emerald-400 flex-shrink-0" />
-                      : item.arrears_amount > 0
-                        ? <AlertTriangle size={16} className="text-red-400 flex-shrink-0" />
-                        : <Clock size={16} className="text-amber-400 flex-shrink-0" />
+                    {(item as any).is_mora_item
+                      ? <AlertTriangle size={16} className="text-red-400 flex-shrink-0 animate-pulse" />
+                      : item.status === 'paid'
+                        ? <CheckCircle size={16} className="text-emerald-400 flex-shrink-0" />
+                        : item.arrears_amount > 0
+                          ? <AlertTriangle size={16} className="text-red-400 flex-shrink-0" />
+                          : <Clock size={16} className="text-amber-400 flex-shrink-0" />
                     }
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-slate-200 text-sm font-medium">{conName}</p>
+                        <p className={clsx('text-sm font-medium', (item as any).is_mora_item ? 'text-red-300' : 'text-slate-200')}>
+                          {conName}{(item as any).is_mora_item ? ' — Mora' : ''}
+                        </p>
+                        {(item as any).postponed && !isExpanded && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded border border-slate-600 text-slate-400 bg-slate-800/60">Pospuesto</span>
+                        )}
                         {isExpanded && (
                           <span className={clsx('text-xs px-1.5 py-0.5 rounded border', CRITICALITY_COLORS[item.criticality as keyof typeof CRITICALITY_COLORS])}>
                             {CRITICALITY_LABELS[item.criticality as keyof typeof CRITICALITY_LABELS]}
@@ -422,6 +441,17 @@ export default function ExpensesPage() {
                         }}>
                           <Clock size={14} /> Diferir
                         </button>
+                        {!(item as any).postponed && !(item as any).is_mora_item && (
+                          <button className="text-xs flex items-center gap-1 text-orange-400 hover:text-orange-300 transition-colors" onClick={() => {
+                            const pending = Math.max(0, (item.budget_amount + item.arrears_amount) - item.executed_amount_cached)
+                            if (pending <= 0) return alert('Este gasto no tiene saldo pendiente.')
+                            if (window.confirm(`¿Posponer ${formatCOP(pending)} al siguiente mes?\nEl siguiente mes se creará un ítem de pago prioritario el día 1.`)) {
+                              postponeItem.mutate(item)
+                            }
+                          }}>
+                            <AlertTriangle size={14} /> Posponer
+                          </button>
+                        )}
                         <button className="text-xs flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors" onClick={() => {
                           if (window.confirm('¿Seguro que deseas eliminar este gasto del mes?')) {
                             deleteItem.mutate(item.id)
