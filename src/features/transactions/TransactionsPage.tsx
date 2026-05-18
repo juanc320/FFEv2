@@ -206,11 +206,7 @@ export default function TransactionsPage() {
         const src = accounts.find(a => a.id === form.source_account_id)
         if (src) await db.from('accounts').update({ current_balance_cached: src.current_balance_cached - form.amount - taxAmount }).eq('id', src.id)
       }
-      if (form.destination_account_id && form.mode === 'transfer_internal') {
-        const dst = accounts.find(a => a.id === form.destination_account_id)
-        if (dst) await db.from('accounts').update({ current_balance_cached: dst.current_balance_cached + form.amount }).eq('id', dst.id)
-      }
-      if (form.mode === 'income' && form.destination_account_id) {
+      if (form.destination_account_id && ['income', 'transfer_internal', 'transfer_external_in'].includes(form.mode)) {
         const dst = accounts.find(a => a.id === form.destination_account_id)
         if (dst) await db.from('accounts').update({ current_balance_cached: dst.current_balance_cached + form.amount }).eq('id', dst.id)
       }
@@ -242,7 +238,7 @@ export default function TransactionsPage() {
       }
       if (oldTx.destination_account_id) {
         const dst = accounts.find(a => a.id === oldTx.destination_account_id)
-        if (dst && (oldTx.type === 'transfer_internal' || oldTx.type === 'income')) {
+        if (dst && ['income', 'transfer_internal', 'transfer_external_in'].includes(oldTx.type)) {
           await db.from('accounts').update({ current_balance_cached: dst.current_balance_cached - Number(oldTx.amount) }).eq('id', dst.id)
         }
       }
@@ -303,7 +299,7 @@ export default function TransactionsPage() {
           await db.from('accounts').update({ current_balance_cached: baseBalance - Number(newValues.amount) - newTaxAmount }).eq('id', src.id)
         }
       }
-      if (newValues.destination_account_id && (oldTx.type === 'transfer_internal' || oldTx.type === 'income')) {
+      if (newValues.destination_account_id && ['income', 'transfer_internal', 'transfer_external_in'].includes(oldTx.type)) {
         const dst = accounts.find(a => a.id === newValues.destination_account_id)
         if (dst) {
           const baseBalance = dst.id === oldTx.destination_account_id ? dst.current_balance_cached - Number(oldTx.amount) : dst.current_balance_cached
@@ -338,10 +334,8 @@ export default function TransactionsPage() {
       }
       if (tx.destination_account_id) {
         const dst = accounts.find(a => a.id === tx.destination_account_id)
-        if (dst) {
-          if (tx.type === 'transfer_internal' || tx.type === 'income') {
-             await db.from('accounts').update({ current_balance_cached: dst.current_balance_cached - tx.amount }).eq('id', dst.id)
-          }
+        if (dst && ['income', 'transfer_internal', 'transfer_external_in'].includes(tx.type)) {
+          await db.from('accounts').update({ current_balance_cached: dst.current_balance_cached - tx.amount }).eq('id', dst.id)
         }
       }
       if (tx.expense_item_id && tx.type === 'expense') {
