@@ -11,14 +11,14 @@ function StatCard({ label, value, sub, icon: Icon, color, id }: {
   icon: React.ElementType; color: string; id: string
 }) {
   return (
-    <div id={id} className="card flex items-start gap-4">
-      <div className={clsx('w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0', color)}>
-        <Icon size={20} />
+    <div id={id} className="card flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+      <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', color)}>
+        <Icon size={18} />
       </div>
-      <div className="min-w-0">
-        <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">{label}</p>
-        <p className="text-white text-xl font-bold mt-0.5 leading-tight">{value}</p>
-        {sub && <p className="text-slate-500 text-xs mt-0.5">{sub}</p>}
+      <div className="min-w-0 flex-1">
+        <p className="text-slate-400 text-xs font-medium uppercase tracking-wide leading-tight">{label}</p>
+        <p className="text-white text-lg font-bold mt-0.5 leading-tight truncate">{value}</p>
+        {sub && <p className="text-slate-500 text-xs mt-0.5 leading-tight">{sub}</p>}
       </div>
     </div>
   )
@@ -212,7 +212,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           id="kpiBalance"
           label="Saldo actual"
