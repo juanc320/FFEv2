@@ -190,6 +190,13 @@ export default function ExpensesPage() {
         items: items.filter(i => (i.due_date || 'Sin fecha') === d)
       })).filter(g => g.items.length > 0)
     }
+    if (viewBy === 'criticality') {
+      return ['critical', 'necessary', 'desirable', 'optional'].map(c => ({
+        id: c,
+        label: CRITICALITY_LABELS[c as keyof typeof CRITICALITY_LABELS],
+        items: items.filter(i => i.criticality === c).sort(sortByDate)
+      })).filter(g => g.items.length > 0)
+    }
     return []
   }, [items, categories, viewBy])
 
@@ -207,7 +214,7 @@ export default function ExpensesPage() {
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Sobres presupuestados</h1>
+          <h1 className="text-2xl font-bold text-white">Plan de gastos</h1>
           <p className="text-slate-400 text-sm mt-0.5">
             Ejecutado: <span className="text-white font-medium">{formatCOP(totalExecuted)}</span>
             {' '}/ Presupuesto: <span className="text-indigo-400 font-medium">{formatCOP(totalBudget)}</span>
@@ -215,11 +222,12 @@ export default function ExpensesPage() {
         </div>
         <div className="flex flex-col items-end gap-2">
           <button className="btn-primary flex items-center gap-2" onClick={() => setShowForm(true)}>
-            <Plus size={16} /> Nuevo sobre
+            <Plus size={16} /> Nuevo gasto
           </button>
           <select className="input px-2 py-1 text-xs bg-slate-800 border-slate-700 text-slate-300 rounded" value={viewBy} onChange={e => setViewBy(e.target.value as any)}>
             <option value="category">Por categoría</option>
             <option value="type">Por tipo</option>
+            <option value="criticality">Por criticidad</option>
             <option value="date">Por fecha de pago</option>
           </select>
         </div>
@@ -228,7 +236,7 @@ export default function ExpensesPage() {
       {/* Formulario */}
       {showForm && (
         <div className="card border-indigo-500/30 space-y-4">
-          <h2 className="text-white font-semibold">Nuevo sobre presupuestado</h2>
+          <h2 className="text-white font-semibold">Nuevo gasto presupuestado</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Categoría</label>
@@ -273,7 +281,7 @@ export default function ExpensesPage() {
           <div className="flex gap-3 justify-end">
             <button className="btn-ghost" onClick={() => setShowForm(false)}>Cancelar</button>
             <button className="btn-primary" disabled={!form.category_id || !form.concept_id || createItem.isPending} onClick={() => createItem.mutate()}>
-              {createItem.isPending ? 'Guardando...' : 'Agregar sobre'}
+              {createItem.isPending ? 'Guardando...' : 'Agregar gasto'}
             </button>
           </div>
         </div>
@@ -283,8 +291,8 @@ export default function ExpensesPage() {
       {isLoading && <div className="card text-center text-slate-500 py-8">Cargando...</div>}
       {!isLoading && items.length === 0 && (
         <div className="card text-center text-slate-500 py-10">
-          <p className="font-medium text-slate-400 mb-1">Sin sobres presupuestados</p>
-          <p className="text-sm">Agrega los sobres del mes con el botón de arriba.</p>
+          <p className="font-medium text-slate-400 mb-1">Sin gastos presupuestados</p>
+          <p className="text-sm">Agrega los gastos del mes con el botón de arriba.</p>
         </div>
       )}
 

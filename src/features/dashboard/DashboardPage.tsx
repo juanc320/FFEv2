@@ -103,7 +103,7 @@ function useDashboardData() {
         deferred += def
         totalBudgeted += budget
         
-        const name = (exp as any).concepts?.name || (exp as any).categories?.name || 'Sobre'
+        const name = (exp as any).concepts?.name || (exp as any).categories?.name || 'Gasto'
         return { ...exp, available, executed, pct, name }
       }).sort((a: any, b: any) => b.available - a.available)
 
@@ -286,12 +286,12 @@ export default function DashboardPage() {
         {/* Sobres / Envelopes */}
         <div className="card space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-white font-semibold">Sobres (Top 5)</h2>
+            <h2 className="text-white font-semibold">Gastos (Top 5)</h2>
             <a href="/expenses" className="text-indigo-400 text-xs hover:text-indigo-300 transition-colors">Ver todos →</a>
           </div>
           <div className="space-y-3">
             {envelopes.length === 0 ? (
-               <p className="text-slate-500 text-sm">No hay sobres presupuestados. <a href="/expenses" className="text-indigo-400">Crear uno.</a></p>
+               <p className="text-slate-500 text-sm">No hay gastos presupuestados. <a href="/expenses" className="text-indigo-400">Crear uno.</a></p>
             ) : envelopes.slice(0, 5).map(env => (
               <div key={env.id} className="space-y-1.5">
                 <div className="flex items-center justify-between">

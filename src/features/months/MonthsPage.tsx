@@ -90,8 +90,9 @@ export default function MonthsPage() {
             const target = (item.budget_amount || 0) + (item.arrears_amount || 0)
             const shortfall = Math.max(0, target - executed - deferred)
             
-            // RN-mora: only critical and necessary carry over arrears automatically
-            const carriesArrears = ['critical', 'necessary'].includes(item.criticality)
+            // RN-mora: Solo los gastos Fijos (Facturas/Obligaciones) que son críticos o necesarios generan Mora. 
+            // Los Variables (Proyecciones de consumo) asumen el sobrante como ahorro y no generan deuda.
+            const carriesArrears = item.expense_type === 'fixed' && ['critical', 'necessary'].includes(item.criticality)
             const newArrears = carriesArrears ? shortfall : 0
 
             let newDueDate = item.due_date

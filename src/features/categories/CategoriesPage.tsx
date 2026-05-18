@@ -69,7 +69,7 @@ export default function CategoriesPage() {
       if (error) throw new Error(error.message)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
-    onError: () => alert('No se puede eliminar esta categoría porque ya tiene sobres o movimientos asociados en algún mes.')
+    onError: () => alert('No se puede eliminar esta categoría porque ya tiene gastos o movimientos asociados en algún mes.')
   })
 
   // Crear concepto
@@ -98,7 +98,7 @@ export default function CategoriesPage() {
       if (error) throw new Error(error.message)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['concepts'] }),
-    onError: () => alert('No se puede eliminar este concepto porque ya tiene sobres o movimientos asociados en algún mes.')
+    onError: () => alert('No se puede eliminar este concepto porque ya tiene gastos o movimientos asociados en algún mes.')
   })
 
   const expenseCats = categories.filter(c => c.type === 'expense')

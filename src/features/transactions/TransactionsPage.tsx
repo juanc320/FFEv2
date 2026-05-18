@@ -360,9 +360,9 @@ export default function TransactionsPage() {
                 </div>
                 {filteredExpenseItems.length > 0 && (
                   <div className="sm:col-span-2">
-                    <label className="label">Sobre presupuestal</label>
+                    <label className="label">Gasto presupuestal</label>
                     <select className="input w-full" value={form.expense_item_id} onChange={e => setForm(f => ({ ...f, expense_item_id: e.target.value }))}>
-                      <option value="">Seleccionar sobre...</option>
+                      <option value="">Seleccionar gasto...</option>
                       {filteredExpenseItems.map(i => {
                         const avail = calcEnvelopeAvailable(i.budget_amount, i.arrears_amount, 0, 0, i.executed_amount_cached, i.deferred_amount)
                         return <option key={i.id} value={i.id}>Disponible: {formatCOP(avail)}</option>
@@ -403,8 +403,8 @@ export default function TransactionsPage() {
           {/* Envelope alert */}
           {envelopeAlert && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
-              <p className="text-red-300 text-sm font-semibold">⚠️ Sobre insuficiente</p>
-              <p className="text-red-400/80 text-xs mt-1">Faltan {formatCOP(envelopeAlert.shortfall)} en el sobre. Ajusta el monto o reasigna presupuesto desde otro sobre.</p>
+              <p className="text-red-300 text-sm font-semibold">⚠️ Presupuesto insuficiente</p>
+              <p className="text-red-400/80 text-xs mt-1">Faltan {formatCOP(envelopeAlert.shortfall)} en el presupuesto. Ajusta el monto o reasigna desde otro gasto.</p>
             </div>
           )}
 
@@ -412,7 +412,7 @@ export default function TransactionsPage() {
           {itemAvailable !== null && form.amount > 0 && (
             <div className={clsx('rounded-xl px-4 py-3 border flex items-center justify-between',
               form.amount > itemAvailable ? 'bg-red-500/10 border-red-500/30' : 'bg-emerald-500/10 border-emerald-500/30')}>
-              <span className="text-sm text-slate-300">Disponible en sobre</span>
+              <span className="text-sm text-slate-300">Disponible en el gasto</span>
               <span className={clsx('font-semibold', form.amount > itemAvailable ? 'text-red-400' : 'text-emerald-400')}>{formatCOP(itemAvailable)}</span>
             </div>
           )}
@@ -500,7 +500,7 @@ export default function TransactionsPage() {
                           className="text-xs flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm('¿Seguro que deseas eliminar este movimiento?\nEl dinero será devuelto a tu cuenta y sobre correspondiente.')) {
+                            if (window.confirm('¿Seguro que deseas eliminar este movimiento?\nEl dinero será devuelto a tu cuenta y gasto correspondiente.')) {
                               deleteTx.mutate(tx)
                             }
                           }}
