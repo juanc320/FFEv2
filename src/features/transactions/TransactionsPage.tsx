@@ -100,6 +100,7 @@ export default function TransactionsPage() {
   const [envelopeAlert, setEnvelopeAlert] = useState<{ shortfall: number; itemId: string } | null>(null)
   const [filterType, setFilterType] = useState<string>('all')
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<any>(null)
 
   useEffect(() => {
     if (location.state?.prefillExpenseId) {
@@ -232,11 +233,101 @@ export default function TransactionsPage() {
     onError: (e) => { if ((e as Error).message !== 'envelope_insufficient') alert('Error: ' + (e as Error).message) },
   })
 
-  const updateTx = useMutation({
-    mutationFn: async ({ id, note, date }: { id: string; note: string; date: string }) => {
-      await db.from('transactions').update({ note: note || null, date }).eq('id', id)
+  const updateTxFull = useMutation({
+    mutationFn: async ({ oldTx, newValues }: { oldTx: Transaction; newValues: typeof editForm }) => {
+      // 1. Revert old account balances
+      if (oldTx.source_account_id) {
+        const src = accounts.find(a => a.id === oldTx.source_account_id)
+        if (src) await db.from('accounts').update({ current_balance_cached: src.current_balance_cached + Number(oldTx.amount) + Number(oldTx.tax_amount || 0) }).eq('id', src.id)
+      }
+      if (oldTx.destination_account_id) {
+        const dst = accounts.find(a => a.id === oldTx.destination_account_id)
+        if (dst && (oldTx.type === 'transfer_internal' || oldTx.type === 'income')) {
+          await db.from('accounts').update({ current_balance_cached: dst.current_balance_cached - Number(oldTx.amount) }).eq('id', dst.id)
+        }
+      }
+
+      // 2. Revert old executed cache
+      if (oldTx.expense_item_id && oldTx.type === 'expense') {
+        const item = expenseItems.find(i => i.id === oldTx.expense_item_id)
+        if (item) await db.from('monthly_expense_items').update({ executed_amount_cached: item.executed_amount_cached - Number(oldTx.amount) }).eq('id', item.id)
+      }
+
+      // 3. Delete old 4x1000 tax transaction if it existed
+      if (oldTx.tax_amount > 0) {
+        await db.from('transactions').delete().eq('parent_transaction_id', oldTx.id)
+      }
+
+      // 4. Calculate new 4x1000 tax amount
+      const newSourceAccount = accounts.find(a => a.id === newValues.source_account_id)
+      const newTaxAmount = newSourceAccount?.applies_4x1000 && !newSourceAccount?.is_4x1000_exempt ? calc4x1000(Number(newValues.amount)) : 0
+
+      // 5. Update main transaction row
+      const { data: updatedTx, error } = await db.from('transactions').update({
+        amount: Number(newValues.amount),
+        tax_amount: newTaxAmount,
+        source_account_id: newValues.source_account_id || null,
+        destination_account_id: newValues.destination_account_id || null,
+        external_party_label: newValues.external_party_label || null,
+        category_id: newValues.category_id || null,
+        concept_id: newValues.concept_id || null,
+        expense_item_id: newValues.expense_item_id || null,
+        date: newValues.date,
+        note: newValues.note || null,
+      }).eq('id', oldTx.id).select().single()
+      if (error) throw error
+
+      // 6. Insert new 4x1000 tax transaction if newTaxAmount > 0
+      if (newTaxAmount > 0 && updatedTx) {
+        await db.from('transactions').insert({
+          family_id: oldTx.family_id,
+          month_id: oldTx.month_id,
+          type: 'tax_4x1000',
+          amount: newTaxAmount,
+          tax_amount: 0,
+          source_account_id: newValues.source_account_id,
+          destination_account_id: null,
+          is_automatic: true,
+          parent_transaction_id: updatedTx.id,
+          date: newValues.date,
+          note: `4×1000 automático por salida de ${formatCOP(Number(newValues.amount))}`,
+          created_by: oldTx.created_by,
+        })
+      }
+
+      // 7. Apply new account balances
+      if (newValues.source_account_id) {
+        const src = accounts.find(a => a.id === newValues.source_account_id)
+        if (src) {
+          const baseBalance = src.id === oldTx.source_account_id ? src.current_balance_cached + Number(oldTx.amount) + Number(oldTx.tax_amount || 0) : src.current_balance_cached
+          await db.from('accounts').update({ current_balance_cached: baseBalance - Number(newValues.amount) - newTaxAmount }).eq('id', src.id)
+        }
+      }
+      if (newValues.destination_account_id && (oldTx.type === 'transfer_internal' || oldTx.type === 'income')) {
+        const dst = accounts.find(a => a.id === newValues.destination_account_id)
+        if (dst) {
+          const baseBalance = dst.id === oldTx.destination_account_id ? dst.current_balance_cached - Number(oldTx.amount) : dst.current_balance_cached
+          await db.from('accounts').update({ current_balance_cached: baseBalance + Number(newValues.amount) }).eq('id', dst.id)
+        }
+      }
+
+      // 8. Apply new executed cache
+      if (newValues.expense_item_id && oldTx.type === 'expense') {
+        const item = expenseItems.find(i => i.id === newValues.expense_item_id)
+        if (item) {
+          const baseExecuted = item.id === oldTx.expense_item_id ? item.executed_amount_cached - Number(oldTx.amount) : item.executed_amount_cached
+          await db.from('monthly_expense_items').update({ executed_amount_cached: baseExecuted + Number(newValues.amount) }).eq('id', item.id)
+        }
+      }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] })
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
+      qc.invalidateQueries({ queryKey: ['expense_items'] })
+      setExpandedTxId(null)
+      setEditForm(null)
+    },
+    onError: (e) => alert('Error al actualizar: ' + (e as Error).message)
   })
 
   const deleteTx = useMutation({
@@ -476,7 +567,26 @@ export default function TransactionsPage() {
             <div key={tx.id} className="card p-0 overflow-hidden">
               <div 
                 className={clsx('flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-slate-800/30 transition-colors', tx.is_automatic ? 'bg-amber-500/5' : '')}
-                onClick={() => setExpandedTxId(expandedTxId === tx.id ? null : tx.id)}
+                onClick={() => {
+                  if (expandedTxId === tx.id) {
+                    setExpandedTxId(null)
+                    setEditForm(null)
+                  } else {
+                    setExpandedTxId(tx.id)
+                    setEditForm({
+                      id: tx.id,
+                      amount: tx.amount,
+                      date: tx.date,
+                      note: tx.note || '',
+                      category_id: tx.category_id || '',
+                      concept_id: tx.concept_id || '',
+                      expense_item_id: tx.expense_item_id || '',
+                      source_account_id: tx.source_account_id || '',
+                      destination_account_id: tx.destination_account_id || '',
+                      external_party_label: tx.external_party_label || ''
+                    })
+                  }
+                }}
               >
                 <div className="flex-shrink-0">{TX_ICON[tx.type]}</div>
                 <div className="flex-1 min-w-0">
@@ -498,27 +608,113 @@ export default function TransactionsPage() {
                 </div>
               </div>
 
-              {expandedTxId === tx.id && (
-                <div className="border-t border-slate-800 px-4 py-3 bg-slate-900/50 space-y-3">
+              {expandedTxId === tx.id && editForm && (
+                <div className="border-t border-slate-800 px-4 py-4 bg-slate-900/50 space-y-4">
                   {!tx.is_automatic ? (
                     <>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="text-xs text-slate-500 block mb-1">Fecha</label>
-                          <input type="date" className="input w-full px-2 py-1.5 text-xs h-8 bg-slate-800 border-slate-700 text-slate-300" 
-                            defaultValue={tx.date} 
-                            onChange={(e) => updateTx.mutate({ id: tx.id, note: tx.note || '', date: e.target.value })}
+                          <label className="text-xs text-slate-400 block mb-1">Monto</label>
+                          <CurrencyInput className="input w-full px-3 py-1.5 text-sm bg-slate-800 border-slate-700 text-white" 
+                            value={editForm.amount} 
+                            onChange={val => setEditForm({ ...editForm, amount: val })}
                           />
                         </div>
                         <div>
-                          <label className="text-xs text-slate-500 block mb-1">Nota</label>
-                          <input type="text" className="input w-full px-2 py-1.5 text-xs h-8 bg-slate-800 border-slate-700 text-slate-300" 
-                            defaultValue={tx.note || ''} 
-                            onBlur={(e) => updateTx.mutate({ id: tx.id, note: e.target.value, date: tx.date })}
+                          <label className="text-xs text-slate-400 block mb-1">Fecha</label>
+                          <input type="date" className="input w-full px-3 py-1.5 text-sm bg-slate-800 border-slate-700 text-white" 
+                            value={editForm.date} 
+                            onChange={e => setEditForm({ ...editForm, date: e.target.value })}
+                          />
+                        </div>
+
+                        {/* Cuenta origen */}
+                        {['expense', 'transfer_internal', 'transfer_external_out', 'adjustment'].includes(tx.type) && (
+                          <div>
+                            <label className="text-xs text-slate-400 block mb-1">Cuenta origen</label>
+                            <select className="input w-full px-3 py-1.5 text-sm bg-slate-800 border-slate-700 text-white" 
+                              value={editForm.source_account_id} 
+                              onChange={e => setEditForm({ ...editForm, source_account_id: e.target.value })}
+                            >
+                              <option value="">Seleccionar...</option>
+                              {internalAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Cuenta destino */}
+                        {['income', 'transfer_internal', 'transfer_external_in'].includes(tx.type) && (
+                          <div>
+                            <label className="text-xs text-slate-400 block mb-1">Cuenta destino</label>
+                            <select className="input w-full px-3 py-1.5 text-sm bg-slate-800 border-slate-700 text-white" 
+                              value={editForm.destination_account_id} 
+                              onChange={e => setEditForm({ ...editForm, destination_account_id: e.target.value })}
+                            >
+                              <option value="">Seleccionar...</option>
+                              {internalAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Categoría + Concepto (solo para gastos) */}
+                        {tx.type === 'expense' && (
+                          <>
+                            <div>
+                              <label className="text-xs text-slate-400 block mb-1">Categoría (opcional)</label>
+                              <select className="input w-full px-3 py-1.5 text-sm bg-slate-800 border-slate-700 text-white" 
+                                value={editForm.category_id} 
+                                onChange={e => setEditForm({ ...editForm, category_id: e.target.value, concept_id: '', expense_item_id: '' })}
+                              >
+                                <option value="">Todas las categorías</option>
+                                {categories.filter(c => c.type === 'expense').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-400 block mb-1">Concepto (opcional)</label>
+                              <select className="input w-full px-3 py-1.5 text-sm bg-slate-800 border-slate-700 text-white" 
+                                value={editForm.concept_id} 
+                                onChange={e => {
+                                  const cid = e.target.value
+                                  const matching = expenseItems.find(i => i.concept_id === cid)
+                                  setEditForm({ ...editForm, concept_id: cid, expense_item_id: matching ? matching.id : '' })
+                                }} 
+                                disabled={!editForm.category_id}
+                              >
+                                <option value="">Todos los conceptos</option>
+                                {concepts.filter(c => c.category_id === editForm.category_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              </select>
+                            </div>
+
+                            <div className="sm:col-span-2">
+                              <label className="text-xs text-slate-400 block mb-1">Gasto presupuestal</label>
+                              <select className="input w-full px-3 py-1.5 text-sm bg-slate-800 border-slate-700 text-white" 
+                                value={editForm.expense_item_id} 
+                                onChange={e => setEditForm({ ...editForm, expense_item_id: e.target.value })}
+                              >
+                                <option value="">Ninguno / Gasto no presupuestado (Otros)</option>
+                                {expenseItems.filter(i => 
+                                  (!editForm.concept_id || i.concept_id === editForm.concept_id) &&
+                                  (!editForm.category_id || i.category_id === editForm.category_id)
+                                ).map(i => {
+                                  const avail = calcEnvelopeAvailable(i.budget_amount, i.arrears_amount, 0, 0, i.executed_amount_cached, i.deferred_amount)
+                                  const conceptName = concepts.find(c => c.id === i.concept_id)?.name || 'Desconocido'
+                                  return <option key={i.id} value={i.id}>{conceptName} — Disponible: {formatCOP(avail)}</option>
+                                })}
+                              </select>
+                            </div>
+                          </>
+                        )}
+
+                        <div className="sm:col-span-2">
+                          <label className="text-xs text-slate-400 block mb-1">Nota (opcional)</label>
+                          <input type="text" className="input w-full px-3 py-1.5 text-sm bg-slate-800 border-slate-700 text-white" 
+                            value={editForm.note} 
+                            onChange={e => setEditForm({ ...editForm, note: e.target.value })}
                           />
                         </div>
                       </div>
-                      <div className="flex justify-end pt-1">
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 mt-4">
                         <button 
                           className="text-xs flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors"
                           onClick={(e) => {
@@ -530,6 +726,13 @@ export default function TransactionsPage() {
                         >
                           <Trash2 size={14} /> Eliminar movimiento
                         </button>
+
+                        <div className="flex items-center gap-2">
+                          <button className="btn-ghost text-xs py-1.5 px-3" onClick={() => { setExpandedTxId(null); setEditForm(null) }}>Cancelar</button>
+                          <button className="btn-primary text-xs py-1.5 px-4" disabled={updateTxFull.isPending} onClick={() => updateTxFull.mutate({ oldTx: tx, newValues: editForm })}>
+                            {updateTxFull.isPending ? 'Guardando...' : 'Guardar cambios'}
+                          </button>
+                        </div>
                       </div>
                     </>
                   ) : (
