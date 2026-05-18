@@ -352,16 +352,16 @@ export default function TransactionsPage() {
             {form.mode === 'expense' && (
               <>
                 <div>
-                  <label className="label">Categoría</label>
+                  <label className="label">Categoría (opcional)</label>
                   <select className="input w-full" value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value, concept_id: '', expense_item_id: '' }))}>
-                    <option value="">Seleccionar...</option>
+                    <option value="">Todas las categorías</option>
                     {categories.filter(c => c.type === 'expense').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="label">Concepto</label>
+                  <label className="label">Concepto (opcional)</label>
                   <select className="input w-full" value={form.concept_id} onChange={e => setForm(f => ({ ...f, concept_id: e.target.value, expense_item_id: '' }))} disabled={!form.category_id}>
-                    <option value="">Seleccionar...</option>
+                    <option value="">Todos los conceptos</option>
                     {filteredConcepts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
@@ -369,10 +369,11 @@ export default function TransactionsPage() {
                   <div className="sm:col-span-2">
                     <label className="label">Gasto presupuestal</label>
                     <select className="input w-full" value={form.expense_item_id} onChange={e => setForm(f => ({ ...f, expense_item_id: e.target.value }))}>
-                      <option value="">Seleccionar gasto...</option>
+                      <option value="">Ninguno / Gasto no presupuestado (Otros)</option>
                       {filteredExpenseItems.map(i => {
                         const avail = calcEnvelopeAvailable(i.budget_amount, i.arrears_amount, 0, 0, i.executed_amount_cached, i.deferred_amount)
-                        return <option key={i.id} value={i.id}>Disponible: {formatCOP(avail)}</option>
+                        const conceptName = concepts.find(c => c.id === i.concept_id)?.name || 'Desconocido'
+                        return <option key={i.id} value={i.id}>{conceptName} — Disponible: {formatCOP(avail)}</option>
                       })}
                     </select>
                   </div>
@@ -466,7 +467,7 @@ export default function TransactionsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-slate-200 text-sm font-medium">
-                      {tx.note ?? conName ?? MODE_LABELS[tx.type as TxMode] ?? tx.type}
+                      {tx.note || conName || (catName ? `${catName} (Otros)` : MODE_LABELS[tx.type as TxMode] ?? tx.type)}
                     </p>
                     {tx.is_automatic && <span className="text-xs px-1.5 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded">Auto</span>}
                   </div>
