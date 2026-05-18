@@ -360,7 +360,11 @@ export default function TransactionsPage() {
                 </div>
                 <div>
                   <label className="label">Concepto (opcional)</label>
-                  <select className="input w-full" value={form.concept_id} onChange={e => setForm(f => ({ ...f, concept_id: e.target.value, expense_item_id: '' }))} disabled={!form.category_id}>
+                  <select className="input w-full" value={form.concept_id} onChange={e => {
+                    const cid = e.target.value
+                    const matching = expenseItems.find(i => i.concept_id === cid)
+                    setForm(f => ({ ...f, concept_id: cid, expense_item_id: matching ? matching.id : '' }))
+                  }} disabled={!form.category_id}>
                     <option value="">Todos los conceptos</option>
                     {filteredConcepts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
