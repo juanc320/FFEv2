@@ -149,12 +149,6 @@ export default function ExpensesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
   })
 
-  const deferExpense = useMutation({
-    mutationFn: async ({ id, newDeferred }: { id: string; newDeferred: number }) => {
-      await db.from('monthly_expense_items').update({ deferred_amount: newDeferred }).eq('id', id)
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
-  })
 
   const postponeItem = useMutation({
     mutationFn: async (item: MonthlyExpenseItem) => {
@@ -398,10 +392,6 @@ export default function ExpensesPage() {
                           <p className={clsx('text-sm font-semibold', item.arrears_amount > 0 ? 'text-red-400' : 'text-slate-200')}>{formatCOP(item.arrears_amount)}</p>
                         </div>
                         <div>
-                          <p className="text-slate-500 text-xs" title="No generará mora">Diferido</p>
-                          <p className={clsx('text-sm font-semibold', item.deferred_amount > 0 ? 'text-amber-400' : 'text-slate-200')}>{formatCOP(item.deferred_amount)}</p>
-                        </div>
-                        <div>
                           <p className="text-slate-500 text-xs">Disponible</p>
                           <p className={clsx('text-sm font-semibold', available <= 0 ? 'text-red-400' : 'text-emerald-400')}>{formatCOP(available)}</p>
                         </div>
@@ -434,12 +424,6 @@ export default function ExpensesPage() {
                           }
                         }}>
                           <Edit2 size={14} /> Editar
-                        </button>
-                        <button className="text-xs flex items-center gap-1 text-amber-400 hover:text-amber-300 transition-colors" onClick={() => {
-                          const amt = window.prompt(`Monto a diferir (actual: ${item.deferred_amount}).\nEsto reduce el monto a pagar este mes sin generar mora en el siguiente.`, String(item.deferred_amount))
-                          if (amt !== null && !isNaN(Number(amt.replace(/\D/g, '')))) deferExpense.mutate({ id: item.id, newDeferred: Number(amt.replace(/\D/g, '')) })
-                        }}>
-                          <Clock size={14} /> Diferir
                         </button>
                         {!(item as any).postponed && !(item as any).is_mora_item && (
                           <button className="text-xs flex items-center gap-1 text-orange-400 hover:text-orange-300 transition-colors" onClick={() => {
