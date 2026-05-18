@@ -269,7 +269,13 @@ export default function TransactionsPage() {
     }
   })
 
-  const filtered = filterType === 'all' ? transactions : transactions.filter(t => t.type === filterType)
+  const filtered = filterType === 'all' 
+    ? transactions 
+    : filterType === 'unbudgeted'
+      ? transactions.filter(t => t.type === 'expense' && !t.expense_item_id)
+      : transactions.filter(t => t.type === filterType)
+
+  const filteredTotal = filtered.reduce((sum, t) => sum + Number(t.amount), 0)
 
   if (!activeMonth) {
     return (
@@ -286,7 +292,12 @@ export default function TransactionsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Movimientos</h1>
-          <p className="text-slate-400 text-sm mt-0.5">{transactions.length} transacciones este mes</p>
+          <p className="text-slate-400 text-sm mt-0.5">
+            {filtered.length} {filtered.length === 1 ? 'transacción' : 'transacciones'}
+            {filterType !== 'all' && filterType !== 'transfer_internal' && (
+              <span className="text-indigo-400 font-medium"> · Total: {formatCOP(filteredTotal)}</span>
+            )}
+          </p>
         </div>
         <button className="btn-primary flex items-center gap-2" onClick={() => { setShowForm(true); setEnvelopeAlert(null) }}>
           <Plus size={16} /> Registrar
@@ -444,10 +455,10 @@ export default function TransactionsPage() {
 
       {/* Filter */}
       <div className="flex gap-2 flex-wrap">
-        {['all', 'expense', 'income', 'transfer_internal', 'tax_4x1000'].map(t => (
+        {['all', 'expense', 'unbudgeted', 'income', 'transfer_internal', 'tax_4x1000'].map(t => (
           <button key={t} onClick={() => setFilterType(t)}
             className={clsx('text-xs px-3 py-1.5 rounded-full border transition-all', filterType === t ? 'bg-indigo-600 border-indigo-500 text-white' : 'border-slate-700 text-slate-400 hover:text-white')}>
-            {t === 'all' ? 'Todos' : t === 'tax_4x1000' ? '4×1000' : MODE_LABELS[t as TxMode] ?? t}
+            {t === 'all' ? 'Todos' : t === 'tax_4x1000' ? '4×1000' : t === 'unbudgeted' ? 'No presupuestados (Otros)' : MODE_LABELS[t as TxMode] ?? t}
           </button>
         ))}
       </div>
