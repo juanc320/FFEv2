@@ -3,10 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
 import { useAuth } from '@/features/auth/AuthContext'
-import { Plus, Wallet, Edit2, Trash2, Check, X, AlertTriangle } from 'lucide-react'
+import { Plus, Wallet, Edit2, Trash2, Check, X, AlertTriangle, ArrowLeftRight } from 'lucide-react'
 import type { Account, AccountType } from '@/shared/types/database'
 import { formatCOP } from '@/shared/utils/calculations'
 import clsx from 'clsx'
+import { useNavigate } from 'react-router-dom'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
@@ -54,6 +55,7 @@ const EMPTY_FORM = {
 export default function AccountsPage() {
   const { profile } = useAuth()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const { data: accounts = [], isLoading } = useAccounts()
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -167,19 +169,19 @@ export default function AccountsPage() {
       )}
 
       {/* Cuentas internas */}
-      <AccountGroup title="Cuentas internas" accounts={internalAccounts} isLoading={isLoading} onEdit={startEdit} onToggle={id => toggleActive.mutate({ id, active: false })} />
+      <AccountGroup title="Cuentas internas" accounts={internalAccounts} isLoading={isLoading} onEdit={startEdit} onToggle={id => toggleActive.mutate({ id, active: false })} onNewTx={id => navigate('/transactions', { state: { prefillAccountId: id } })} />
 
       {/* Cuentas externas */}
       {externalAccounts.length > 0 && (
-        <AccountGroup title="Cuentas externas (referencia)" accounts={externalAccounts} isLoading={false} onEdit={startEdit} onToggle={id => toggleActive.mutate({ id, active: false })} />
+        <AccountGroup title="Cuentas externas (referencia)" accounts={externalAccounts} isLoading={false} onEdit={startEdit} onToggle={id => toggleActive.mutate({ id, active: false })} onNewTx={id => navigate('/transactions', { state: { prefillAccountId: id } })} />
       )}
     </div>
   )
 }
 
-function AccountGroup({ title, accounts, isLoading, onEdit, onToggle }: {
+function AccountGroup({ title, accounts, isLoading, onEdit, onToggle, onNewTx }: {
   title: string; accounts: Account[]; isLoading: boolean
-  onEdit: (a: Account) => void; onToggle: (id: string) => void
+  onEdit: (a: Account) => void; onToggle: (id: string) => void; onNewTx: (id: string) => void
 }) {
   return (
     <div className="card space-y-3">
@@ -208,6 +210,7 @@ function AccountGroup({ title, accounts, isLoading, onEdit, onToggle }: {
             )}
           </div>
           <div className="flex items-center gap-1">
+            <button className="icon-btn text-indigo-400 hover:text-indigo-300 hover:bg-indigo-400/10" title="Nuevo movimiento" onClick={() => onNewTx(a.id)}><ArrowLeftRight size={14} /></button>
             <button className="icon-btn text-slate-400 hover:text-white hover:bg-slate-700" onClick={() => onEdit(a)}><Edit2 size={14} /></button>
             <button className="icon-btn text-slate-400 hover:text-red-400 hover:bg-red-400/10" onClick={() => onToggle(a.id)}><Trash2 size={14} /></button>
           </div>

@@ -112,6 +112,13 @@ export default function TransactionsPage() {
         expense_item_id: location.state.prefillExpenseId
       }))
       window.history.replaceState({}, document.title)
+    } else if (location.state?.prefillAccountId) {
+      setShowForm(true)
+      setForm(f => ({
+        ...f,
+        source_account_id: location.state.prefillAccountId
+      }))
+      window.history.replaceState({}, document.title)
     }
   }, [location.state])
 
