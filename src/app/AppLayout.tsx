@@ -15,6 +15,7 @@ import {
   X,
   ChevronRight,
   TrendingUp,
+  RefreshCw,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -23,8 +24,9 @@ const navItems = [
   { to: '/months',    icon: Calendar,         label: 'Mes actual',  description: 'Presupuesto' },
   { to: '/transactions', icon: ArrowLeftRight, label: 'Movimientos', description: 'Transacciones' },
   { to: '/accounts',  icon: Wallet,           label: 'Cuentas',     description: 'Cuentas y bolsillos' },
-  { to: '/expenses',  icon: Receipt,          label: 'Plan de gastos',      description: 'Gastos del mes' },
-  { to: '/income',    icon: TrendingUp,       label: 'Ingresos',    description: 'Ingresos esperados' },
+  { to: '/expenses',  icon: Receipt,    label: 'Plan de gastos',    description: 'Gastos del mes' },
+  { to: '/periodic',  icon: RefreshCw,  label: 'Gastos periódicos', description: 'Trimestrales, anuales' },
+  { to: '/income',    icon: TrendingUp, label: 'Ingresos',          description: 'Ingresos esperados' },
   { to: '/categories', icon: Tag,             label: 'Categorías',  description: 'Categorías y conceptos' },
   { to: '/family',    icon: Users,            label: 'Familia',     description: 'Integrantes' },
   { to: '/import',    icon: Upload,           label: 'Importar',    description: 'Excel / CSV' },

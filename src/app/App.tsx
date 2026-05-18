@@ -14,6 +14,7 @@ import IncomePage from '@/features/income/IncomePage'
 import CategoriesPage from '@/features/categories/CategoriesPage'
 import FamilyPage from '@/features/family/FamilyPage'
 import ImportPage from '@/features/import/ImportPage'
+import PeriodicExpensesPage from '@/features/periodic/PeriodicExpensesPage'
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
               <Route path="categories"   element={<CategoriesPage />} />
               <Route path="family"       element={<FamilyPage />} />
               <Route path="import"       element={<ImportPage />} />
+              <Route path="periodic"     element={<PeriodicExpensesPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

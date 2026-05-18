@@ -124,6 +124,49 @@ export default function MonthsPage() {
           await db.from('monthly_expense_items').insert(newItems)
         }
       }
+
+      // Inyección automática de gastos periódicos
+      if (newMonth) {
+        const { data: periodicItems } = await db.from('periodic_expenses')
+          .select('*')
+          .eq('family_id', profile!.family_id!)
+          .eq('active', true)
+
+        if (periodicItems && periodicItems.length > 0) {
+          const periodicToInject = periodicItems.filter((p: any) => {
+            const intervalMonths = p.periodicity === 'quarterly' ? 3 : p.periodicity === 'semi_annual' ? 6 : 12
+            // Calcular meses de diferencia desde el inicio hasta el mes a crear
+            const diffMonths = (year - p.start_year) * 12 + (month - p.start_month)
+            // Corresponde si diffMonths >= 0 y es múltiplo del intervalo
+            return diffMonths >= 0 && diffMonths % intervalMonths === 0
+          })
+
+          if (periodicToInject.length > 0) {
+            const periodicExpenseItems = periodicToInject.map((p: any) => {
+              const lastDayOfMonth = new Date(year, month, 0).getDate()
+              const dueDay = p.due_day ? Math.min(p.due_day, lastDayOfMonth) : null
+              const dueDate = dueDay ? `${year}-${String(month).padStart(2, '0')}-${String(dueDay).padStart(2, '0')}` : null
+              return {
+                family_id: profile!.family_id!,
+                month_id: newMonth.id,
+                category_id: p.category_id,
+                concept_id: p.concept_id,
+                expense_type: 'sporadic',
+                criticality: p.criticality,
+                due_mode: 'exact',
+                due_date: dueDate,
+                budget_amount: p.amount,
+                arrears_amount: 0,
+                executed_amount_cached: 0,
+                deferred_amount: 0,
+                status: 'pending',
+                active_in_month: true,
+              }
+            })
+            await db.from('monthly_expense_items').insert(periodicExpenseItems)
+          }
+        }
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['budget_months'] })
