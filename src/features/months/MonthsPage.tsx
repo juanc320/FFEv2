@@ -394,7 +394,7 @@ export default function MonthsPage() {
                 >
                   <input 
                     type="checkbox" 
-                    className="rounded border-slate-700 bg-slate-800 text-indigo-650 focus:ring-indigo-500 focus:ring-offset-slate-900 w-4.5 h-4.5 cursor-pointer"
+                    className="rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 w-5 h-5 cursor-pointer accent-indigo-500"
                     checked={item.checked}
                     onChange={e => {
                       const updated = [...prevItemsToCopy]
