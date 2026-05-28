@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { db } from '@/lib/db'
 import { useAuth } from '@/features/auth/AuthContext'
-import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, Wallet, Receipt, ArrowRightLeft } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, Wallet, Receipt, ArrowRightLeft, Shield, PiggyBank } from 'lucide-react'
 import { formatCOP, monthName } from '@/shared/utils/calculations'
 import clsx from 'clsx'
 import type { Account, BudgetMonth, MonthlyExpenseItem, MonthlyIncomeItem, Transaction } from '@/shared/types/database'
@@ -82,8 +82,8 @@ function useDashboardData() {
       let totalBudgeted = 0
       let totalIncomeExpected = 0
 
-      // Envelopes calculation
-      const envelopes = expenses.map(exp => {
+      // Map and enrich all expenses
+      const allExpenses = expenses.map(exp => {
         const budget = Number(exp.budget_amount) || 0
         const arr = Number(exp.arrears_amount) || 0
         const def = Number(exp.deferred_amount) || 0
@@ -105,7 +105,21 @@ function useDashboardData() {
         
         const name = (exp as any).concepts?.name || (exp as any).categories?.name || 'Gasto'
         return { ...exp, available, executed, pct, name }
-      }).sort((a: any, b: any) => b.available - a.available)
+      })
+
+      // Separate into Envelopes (variable) and Obligations (fixed, sporadic)
+      const envelopes = allExpenses
+        .filter(e => e.expense_type === 'variable')
+        .sort((a: any, b: any) => b.available - a.available)
+
+      const obligations = allExpenses
+        .filter(e => e.expense_type === 'fixed' || e.expense_type === 'sporadic')
+        .sort((a: any, b: any) => {
+          if (!a.due_date && !b.due_date) return 0
+          if (!a.due_date) return 1
+          if (!b.due_date) return -1
+          return a.due_date.localeCompare(b.due_date)
+        })
 
       // Income calculation
       const pendingIncomeItems = incomes.map(inc => {
@@ -124,14 +138,19 @@ function useDashboardData() {
         return { ...inc, expected, received, pending, status: pending === 0 ? 'paid' : received > 0 ? 'partial' : 'pending' }
       }).filter(inc => inc.pending > 0)
 
-      // Critical expenses
-      const criticalExpenses = envelopes
-        .filter(e => e.criticality === 'critical' || e.criticality === 'necessary')
-        .map(e => ({
-          ...e,
-          status: e.available <= 0 ? 'paid' : 'pending' as const
-        }))
-        .sort((a: any, b: any) => (a.due_date && b.due_date ? a.due_date.localeCompare(b.due_date) : 0))
+      // Filter only pending obligations for the critical/obligations section
+      const pendingObligations = obligations
+        .filter(e => e.available > 0)
+        .map(e => {
+          let statusLabel = 'Pendiente'
+          if (e.executed > 0) {
+            statusLabel = `Abonado (${Math.round((e.executed / (e.budget_amount + e.arrears_amount)) * 100)}%)`
+          }
+          return {
+            ...e,
+            statusLabel
+          }
+        })
         .slice(0, 5)
 
       const projected = totalBalance + pendingIncome - pendingExpenses
@@ -148,8 +167,9 @@ function useDashboardData() {
         totalIncomeExpected,
         projected,
         envelopes,
+        obligations,
         pendingIncomeItems,
-        criticalExpenses
+        pendingObligations
       }
     },
     enabled: !!profile?.family_id
@@ -184,7 +204,7 @@ export default function DashboardPage() {
 
   const {
     month, accounts, totalBalance, pendingIncome, pendingExpenses, arrears, deferred, 
-    projected, envelopes, pendingIncomeItems, criticalExpenses
+    projected, envelopes, pendingIncomeItems, pendingObligations
   } = data
 
   const isRed = projected < 0
@@ -286,19 +306,22 @@ export default function DashboardPage() {
         {/* Sobres / Envelopes */}
         <div className="card space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-white font-semibold">Gastos (Top 5)</h2>
+            <h2 className="text-white font-semibold flex items-center gap-1.5">
+              <PiggyBank size={16} className="text-indigo-400" />
+              Tus Sobres (Consumo)
+            </h2>
             <a href="/expenses" className="text-indigo-400 text-xs hover:text-indigo-300 transition-colors">Ver todos →</a>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             {envelopes.length === 0 ? (
-               <p className="text-slate-500 text-sm">No hay gastos presupuestados. <a href="/expenses" className="text-indigo-400">Crear uno.</a></p>
+               <p className="text-slate-500 text-sm">No hay sobres activos. <a href="/expenses" className="text-indigo-400">Crear uno.</a></p>
             ) : envelopes.slice(0, 5).map(env => (
               <div key={env.id} className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-slate-300 text-xs font-medium truncate max-w-[140px]">{env.name}</p>
+                  <p className="text-slate-350 text-xs font-medium truncate max-w-[150px]">{env.name}</p>
                   <p className={clsx(
                     'text-xs font-semibold flex-shrink-0',
-                    env.available <= 0 ? 'text-red-400' : env.pct >= 70 ? 'text-amber-400' : 'text-emerald-400'
+                    env.available <= 0 ? 'text-red-400' : env.pct >= 75 ? 'text-amber-400' : 'text-emerald-400'
                   )}>
                     {formatCOP(env.available)}
                   </p>
@@ -306,10 +329,10 @@ export default function DashboardPage() {
                 <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                   <div
                     className={clsx(
-                      'h-full rounded-full transition-all',
-                      env.available <= 0 ? 'bg-red-500' : env.pct >= 70 ? 'bg-amber-500' : 'bg-indigo-500'
+                      'h-full rounded-full transition-all duration-300',
+                      env.available < 0 ? 'bg-red-500' : env.pct >= 75 ? 'bg-amber-500' : 'bg-emerald-550'
                     )}
-                    style={{ width: `${Math.max(100 - env.pct, 0)}%` }}
+                    style={{ width: `${env.pct}%` }}
                   />
                 </div>
               </div>
@@ -317,31 +340,38 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Gastos críticos y alertas */}
+        {/* Cuentas por Pagar (Obligaciones) e Ingresos */}
         <div className="space-y-4">
-          {/* Gastos críticos */}
+          {/* Obligaciones */}
           <div className="card space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-white font-semibold">Gastos críticos</h2>
-              <a href="/expenses" className="text-indigo-400 text-xs hover:text-indigo-300 transition-colors">Ver todos →</a>
+              <h2 className="text-white font-semibold flex items-center gap-1.5">
+                <Shield size={16} className="text-orange-400" />
+                Cuentas por Pagar
+              </h2>
+              <a href="/expenses" className="text-indigo-400 text-xs hover:text-indigo-300 transition-colors">Ver todas →</a>
             </div>
             <div className="space-y-2">
-              {criticalExpenses.length === 0 ? (
-                <p className="text-slate-500 text-sm">Todo en orden por ahora.</p>
-              ) : criticalExpenses.map(exp => (
-                <div key={exp.id} className="flex items-center gap-3 py-1.5 border-b border-slate-800 last:border-0">
-                  {exp.status === 'paid'
-                    ? <CheckCircle size={15} className="text-emerald-400 flex-shrink-0" />
-                    : <Clock size={15} className="text-amber-400 flex-shrink-0" />
-                  }
+              {pendingObligations.length === 0 ? (
+                <p className="text-slate-500 text-sm py-2">No tienes obligaciones pendientes. ¡Excelente!</p>
+              ) : pendingObligations.map(exp => (
+                <div key={exp.id} className="flex items-center gap-3 py-2 border-b border-slate-800 last:border-0">
+                  <Clock size={14} className={clsx("flex-shrink-0", exp.executed > 0 ? "text-sky-400" : "text-orange-400")} />
                   <div className="flex-1 min-w-0">
                     <p className="text-slate-300 text-xs font-medium truncate">{exp.name}</p>
-                    {exp.due_date && <p className="text-slate-500 text-xs">{exp.due_date}</p>}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {exp.due_date && (
+                        <p className="text-slate-500 text-[10px] flex items-center gap-0.5">
+                          <span>Vence:</span>
+                          <span className="text-slate-400">{exp.due_date.split('-').reverse().slice(0, 2).join('/')}</span>
+                        </p>
+                      )}
+                      <span className={clsx("text-[9px] px-1.5 py-0.5 rounded border uppercase tracking-wide font-medium", exp.executed > 0 ? "bg-sky-500/10 text-sky-400 border-sky-500/20" : "bg-orange-500/10 text-orange-400 border-orange-500/20")}>
+                        {exp.statusLabel}
+                      </span>
+                    </div>
                   </div>
-                  <p className={clsx(
-                    'text-xs font-semibold flex-shrink-0',
-                    exp.status === 'paid' ? 'text-emerald-400' : 'text-slate-200'
-                  )}>
+                  <p className="text-white text-xs font-semibold flex-shrink-0">
                     {formatCOP(exp.available)}
                   </p>
                 </div>
@@ -382,13 +412,13 @@ export default function DashboardPage() {
 
       {/* Alerta de mora */}
       {(arrears > 0 || deferred > 0) && (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-5 py-4 flex items-start gap-3">
-          <AlertTriangle size={18} className="text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-5 py-4 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-orange-400 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-amber-300 text-sm font-semibold">Tienes saldos pendientes</p>
-            <p className="text-amber-400/70 text-xs mt-0.5">
+            <p className="text-orange-300 text-sm font-semibold">Tienes saldos pendientes</p>
+            <p className="text-orange-400/70 text-xs mt-0.5">
               Mora acumulada: {formatCOP(arrears)} · Gastos Diferidos: {formatCOP(deferred)}. 
-              Revisa y planifica su pago este mes.
+              Revisa y planifica su pago este mes desde tu Plan de Gastos.
             </p>
           </div>
         </div>

@@ -101,6 +101,11 @@ export default function TransactionsPage() {
   const [filterType, setFilterType] = useState<string>('all')
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>(null)
+  const [prefilledFields, setPrefilledFields] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
 
   useEffect(() => {
     if (location.state?.prefillExpenseId) {
@@ -110,16 +115,26 @@ export default function TransactionsPage() {
         mode: 'expense',
         category_id: location.state.prefillCategoryId,
         concept_id: location.state.prefillConceptId,
-        expense_item_id: location.state.prefillExpenseId
+        expense_item_id: location.state.prefillExpenseId,
+        amount: location.state.prefillAmount || 0,
       }))
+      setPrefilledFields({
+        category_id: !!location.state.prefillCategoryId,
+        concept_id: !!location.state.prefillConceptId,
+        expense_item_id: !!location.state.prefillExpenseId,
+        amount: !!location.state.prefillAmount,
+      })
       window.history.replaceState({}, document.title)
+      window.scrollTo(0, 0)
     } else if (location.state?.prefillAccountId) {
       setShowForm(true)
       setForm(f => ({
         ...f,
         source_account_id: location.state.prefillAccountId
       }))
+      setPrefilledFields({})
       window.history.replaceState({}, document.title)
+      window.scrollTo(0, 0)
     }
   }, [location.state])
 
@@ -225,6 +240,7 @@ export default function TransactionsPage() {
       setShowForm(false)
       setForm(EMPTY_FORM)
       setEnvelopeAlert(null)
+      setPrefilledFields({})
     },
     onError: (e) => { if ((e as Error).message !== 'envelope_insufficient') alert('Error: ' + (e as Error).message) },
   })
@@ -384,7 +400,7 @@ export default function TransactionsPage() {
             )}
           </p>
         </div>
-        <button className="btn-primary flex items-center gap-2" onClick={() => { setShowForm(true); setEnvelopeAlert(null) }}>
+        <button className="btn-primary flex items-center gap-2" onClick={() => { setShowForm(true); setEnvelopeAlert(null); setPrefilledFields({}); }}>
           <Plus size={16} /> Registrar
         </button>
       </div>
@@ -407,7 +423,14 @@ export default function TransactionsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Monto</label>
-              <CurrencyInput className="input w-full" value={form.amount} onChange={val => setForm(f => ({ ...f, amount: val }))} />
+              <CurrencyInput 
+                className={clsx("input w-full", prefilledFields.amount && "opacity-60 border-slate-700/50 bg-slate-800/40 text-slate-450 hover:opacity-85 focus:opacity-100 transition-opacity")} 
+                value={form.amount} 
+                onChange={val => {
+                  setForm(f => ({ ...f, amount: val }))
+                  if (prefilledFields.amount) setPrefilledFields(prev => ({ ...prev, amount: false }))
+                }} 
+              />
             </div>
             <div>
               <label className="label">Fecha</label>
@@ -449,18 +472,31 @@ export default function TransactionsPage() {
               <>
                 <div>
                   <label className="label">Categoría (opcional)</label>
-                  <select className="input w-full" value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value, concept_id: '', expense_item_id: '' }))}>
+                  <select 
+                    className={clsx("input w-full", prefilledFields.category_id && "opacity-60 border-slate-700/50 bg-slate-800/40 text-slate-450 hover:opacity-85 focus:opacity-100 transition-opacity")} 
+                    value={form.category_id} 
+                    onChange={e => {
+                      setForm(f => ({ ...f, category_id: e.target.value, concept_id: '', expense_item_id: '' }))
+                      setPrefilledFields(prev => ({ ...prev, category_id: false, concept_id: false, expense_item_id: false }))
+                    }}
+                  >
                     <option value="">Todas las categorías</option>
                     {categories.filter(c => c.type === 'expense').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="label">Concepto (opcional)</label>
-                  <select className="input w-full" value={form.concept_id} onChange={e => {
-                    const cid = e.target.value
-                    const matching = expenseItems.find(i => i.concept_id === cid)
-                    setForm(f => ({ ...f, concept_id: cid, expense_item_id: matching ? matching.id : '' }))
-                  }} disabled={!form.category_id}>
+                  <select 
+                    className={clsx("input w-full", prefilledFields.concept_id && "opacity-60 border-slate-700/50 bg-slate-800/40 text-slate-450 hover:opacity-85 focus:opacity-100 transition-opacity")} 
+                    value={form.concept_id} 
+                    onChange={e => {
+                      const cid = e.target.value
+                      const matching = expenseItems.find(i => i.concept_id === cid)
+                      setForm(f => ({ ...f, concept_id: cid, expense_item_id: matching ? matching.id : '' }))
+                      setPrefilledFields(prev => ({ ...prev, concept_id: false, expense_item_id: false }))
+                    }} 
+                    disabled={!form.category_id}
+                  >
                     <option value="">Todos los conceptos</option>
                     {filteredConcepts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
@@ -468,12 +504,24 @@ export default function TransactionsPage() {
                 {filteredExpenseItems.length > 0 && (
                   <div className="sm:col-span-2">
                     <label className="label">Gasto presupuestal</label>
-                    <select className="input w-full" value={form.expense_item_id} onChange={e => setForm(f => ({ ...f, expense_item_id: e.target.value }))}>
+                    <select 
+                      className={clsx("input w-full", prefilledFields.expense_item_id && "opacity-60 border-slate-700/50 bg-slate-800/40 text-slate-450 hover:opacity-85 focus:opacity-100 transition-opacity")} 
+                      value={form.expense_item_id} 
+                      onChange={e => {
+                        setForm(f => ({ ...f, expense_item_id: e.target.value }))
+                        if (prefilledFields.expense_item_id) setPrefilledFields(prev => ({ ...prev, expense_item_id: false }))
+                      }}
+                    >
                       <option value="">Ninguno / Gasto no presupuestado (Otros)</option>
                       {filteredExpenseItems.map(i => {
-                        const avail = calcEnvelopeAvailable(i.budget_amount, i.arrears_amount, 0, 0, i.executed_amount_cached, i.deferred_amount)
                         const conceptName = concepts.find(c => c.id === i.concept_id)?.name || 'Desconocido'
-                        return <option key={i.id} value={i.id}>{conceptName} — Disponible: {formatCOP(avail)}</option>
+                        if (i.expense_type === 'variable') {
+                          const avail = calcEnvelopeAvailable(i.budget_amount, i.arrears_amount, 0, 0, i.executed_amount_cached, i.deferred_amount)
+                          return <option key={i.id} value={i.id}>{conceptName} — Disponible: {formatCOP(avail)}</option>
+                        } else {
+                          const pending = Math.max(0, i.budget_amount + i.arrears_amount - i.executed_amount_cached - i.deferred_amount)
+                          return <option key={i.id} value={i.id}>{conceptName} — Pendiente: {formatCOP(pending)}</option>
+                        }
                       })}
                     </select>
                   </div>
@@ -509,24 +557,45 @@ export default function TransactionsPage() {
           )}
 
           {/* Envelope alert */}
-          {envelopeAlert && (
+          {envelopeAlert && selectedItem && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
-              <p className="text-red-300 text-sm font-semibold">⚠️ Presupuesto insuficiente</p>
-              <p className="text-red-400/80 text-xs mt-1">Faltan {formatCOP(envelopeAlert.shortfall)} en el presupuesto. Ajusta el monto o reasigna desde otro gasto.</p>
+              <p className="text-red-300 text-sm font-semibold">
+                {selectedItem.expense_type === 'variable' ? '⚠️ Presupuesto insuficiente' : '⚠️ Pago excede el saldo'}
+              </p>
+              <p className="text-red-400/80 text-xs mt-1">
+                {selectedItem.expense_type === 'variable'
+                  ? `Faltan ${formatCOP(envelopeAlert.shortfall)} en el bolsillo. Ajusta el monto o reasigna desde otro gasto.`
+                  : `El pago ingresado supera por ${formatCOP(envelopeAlert.shortfall)} el saldo pendiente de esta obligación. Ajusta el monto.`}
+              </p>
             </div>
           )}
 
           {/* Envelope info */}
-          {itemAvailable !== null && form.amount > 0 && (
+          {itemAvailable !== null && selectedItem && form.amount > 0 && (
             <div className={clsx('rounded-xl px-4 py-3 border flex items-center justify-between',
-              form.amount > itemAvailable ? 'bg-red-500/10 border-red-500/30' : 'bg-emerald-500/10 border-emerald-500/30')}>
-              <span className="text-sm text-slate-300">Disponible en el gasto</span>
-              <span className={clsx('font-semibold', form.amount > itemAvailable ? 'text-red-400' : 'text-emerald-400')}>{formatCOP(itemAvailable)}</span>
+              form.amount > itemAvailable
+                ? 'bg-red-500/10 border-red-500/30'
+                : selectedItem.expense_type === 'variable'
+                  ? 'bg-emerald-500/10 border-emerald-500/30'
+                  : 'bg-orange-500/10 border-orange-500/30'
+            )}>
+              <span className="text-sm text-slate-300">
+                {selectedItem.expense_type === 'variable' ? 'Disponible en el bolsillo' : 'Pendiente de pago'}
+              </span>
+              <span className={clsx('font-semibold',
+                form.amount > itemAvailable
+                  ? 'text-red-400'
+                  : selectedItem.expense_type === 'variable'
+                    ? 'text-emerald-400'
+                    : 'text-orange-400'
+              )}>
+                {formatCOP(itemAvailable)}
+              </span>
             </div>
           )}
 
           <div className="flex gap-3 justify-end">
-            <button className="btn-ghost" onClick={() => { setShowForm(false); setEnvelopeAlert(null) }}>Cancelar</button>
+            <button className="btn-ghost" onClick={() => { setShowForm(false); setEnvelopeAlert(null); setPrefilledFields({}); }}>Cancelar</button>
             <button
               className="btn-primary"
               disabled={form.amount <= 0 || saveTransaction.isPending || (form.mode === 'adjustment' && !form.note.trim())}
@@ -690,9 +759,14 @@ export default function TransactionsPage() {
                                   (!editForm.concept_id || i.concept_id === editForm.concept_id) &&
                                   (!editForm.category_id || i.category_id === editForm.category_id)
                                 ).map(i => {
-                                  const avail = calcEnvelopeAvailable(i.budget_amount, i.arrears_amount, 0, 0, i.executed_amount_cached, i.deferred_amount)
                                   const conceptName = concepts.find(c => c.id === i.concept_id)?.name || 'Desconocido'
-                                  return <option key={i.id} value={i.id}>{conceptName} — Disponible: {formatCOP(avail)}</option>
+                                  if (i.expense_type === 'variable') {
+                                    const avail = calcEnvelopeAvailable(i.budget_amount, i.arrears_amount, 0, 0, i.executed_amount_cached, i.deferred_amount)
+                                    return <option key={i.id} value={i.id}>{conceptName} — Disponible: {formatCOP(avail)}</option>
+                                  } else {
+                                    const pending = Math.max(0, i.budget_amount + i.arrears_amount - i.executed_amount_cached - i.deferred_amount)
+                                    return <option key={i.id} value={i.id}>{conceptName} — Pendiente: {formatCOP(pending)}</option>
+                                  }
                                 })}
                               </select>
                             </div>

@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
 import { useAuth } from '@/features/auth/AuthContext'
-import type { BudgetMonth } from '@/shared/types/database'
+import type { BudgetMonth, Category, Concept } from '@/shared/types/database'
 import { monthName } from '@/shared/utils/calculations'
-import { Calendar, Plus, Lock, ChevronRight } from 'lucide-react'
+import { Calendar, Plus, Lock, ChevronRight, ChevronDown, Tag } from 'lucide-react'
 import clsx from 'clsx'
+import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
 export function useBudgetMonths() {
   const { profile } = useAuth()
@@ -50,11 +51,78 @@ export default function MonthsPage() {
   const now = new Date()
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
+  
+  // Asistente de creación de mes
+  const [step, setStep] = useState<'config' | 'preview'>('config')
+  const [prevItemsToCopy, setPrevItemsToCopy] = useState<any[]>([])
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // Resetear estados al cerrar/abrir formulario
+  useEffect(() => {
+    if (!showForm) {
+      setStep('config')
+      setPrevItemsToCopy([])
+      setExpandedId(null)
+    }
+  }, [showForm])
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories', profile?.family_id],
+    queryFn: async () => {
+      const { data } = await supabase.from('categories').select('*').eq('family_id', profile!.family_id!)
+      return (data ?? []) as Category[]
+    },
+    enabled: !!profile?.family_id,
+  })
+
+  const { data: concepts = [] } = useQuery({
+    queryKey: ['concepts', profile?.family_id],
+    queryFn: async () => {
+      const { data } = await supabase.from('concepts').select('*').eq('family_id', profile!.family_id!)
+      return (data ?? []) as Concept[]
+    },
+    enabled: !!profile?.family_id,
+  })
 
   const activeMonth = months.find(m => m.status === 'active')
 
+  const handleProceedToPreview = async () => {
+    // 1. Obtener mes anterior
+    const { data: prevMonths } = await db.from('budget_months')
+      .select('id')
+      .eq('family_id', profile!.family_id!)
+      .order('year', { ascending: false })
+      .order('month', { ascending: false })
+      .limit(1)
+    
+    const prevMonthId = prevMonths?.[0]?.id
+
+    if (prevMonthId) {
+      // 2. Traer gastos activos no pospuestos de ese mes
+      const { data: prevItems } = await db.from('monthly_expense_items')
+        .select('*')
+        .eq('month_id', prevMonthId)
+        .eq('active_in_month', true)
+        .eq('postponed', false)
+      
+      if (prevItems && prevItems.length > 0) {
+        // Enriquecer con estados de edición temporal
+        setPrevItemsToCopy(prevItems.map((item: any) => ({
+          ...item,
+          checked: true,
+          temp_budget: item.budget_amount,
+        })))
+        setStep('preview')
+        return
+      }
+    }
+    
+    // Si no hay mes anterior o no tiene gastos, crear inmediatamente
+    createMonth.mutate()
+  }
+
   const createMonth = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (customItems?: any[]) => {
       // Find previous month (usually the most recent one)
       const { data: prevMonths } = await db.from('budget_months')
         .select('id')
@@ -77,15 +145,13 @@ export default function MonthsPage() {
       if (error) throw error
 
       if (prevMonthId && newMonth) {
-        // Fetch items from prev month — excluir los pospuestos (tienen su propio flujo)
-        const { data: prevItems } = await db.from('monthly_expense_items')
-          .select('*')
-          .eq('month_id', prevMonthId)
-          .eq('active_in_month', true)
-          .eq('postponed', false)
+        // Usar los ítems seleccionados y personalizados por el usuario
+        const itemsToInsert = customItems
+          ? customItems.filter(i => i.checked)
+          : []
         
-        if (prevItems && prevItems.length > 0) {
-          const newItems = prevItems.map((item: any) => {
+        if (itemsToInsert.length > 0) {
+          const newItems = itemsToInsert.map((item: any) => {
             const executed = item.executed_amount_cached || 0
             const deferred = item.deferred_amount || 0
             const target = (item.budget_amount || 0) + (item.arrears_amount || 0)
@@ -113,7 +179,7 @@ export default function MonthsPage() {
               criticality: item.criticality,
               due_mode: item.due_mode,
               due_date: newDueDate,
-              budget_amount: item.budget_amount,
+              budget_amount: Number(item.temp_budget) || 0, // Monto personalizado ingresado en el wizard
               arrears_amount: newArrears,
               executed_amount_cached: 0,
               deferred_amount: 0,
@@ -267,8 +333,8 @@ export default function MonthsPage() {
         </div>
       )}
 
-      {/* Formulario nuevo mes */}
-      {showForm && (
+      {/* Formulario nuevo mes (Wizard Paso 1 y Paso 2) */}
+      {showForm && step === 'config' && (
         <div className="card border-indigo-500/30 space-y-4">
           <h2 className="text-white font-semibold">Crear nuevo mes</h2>
           <div className="grid grid-cols-2 gap-4">
@@ -295,8 +361,93 @@ export default function MonthsPage() {
           )}
           <div className="flex gap-3 justify-end">
             <button className="btn-ghost" onClick={() => setShowForm(false)}>Cancelar</button>
-            <button className="btn-primary" disabled={createMonth.isPending} onClick={() => createMonth.mutate()}>
-              {createMonth.isPending ? 'Creando...' : 'Crear mes'}
+            <button className="btn-primary" onClick={handleProceedToPreview}>
+              Siguiente (Ajustar plan) →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showForm && step === 'preview' && (
+        <div className="card border-indigo-500/30 space-y-4 max-h-[85vh] flex flex-col">
+          <div className="flex-shrink-0">
+            <h2 className="text-white font-semibold">Personalizar Plan de Gastos ({monthName(month)} {year})</h2>
+            <p className="text-slate-400 text-xs mt-1">
+              Desmarca los gastos que no aplican para este nuevo mes o ajusta sus presupuestos iniciales directamente.
+            </p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 max-h-[50vh] min-h-[150px] scrollbar-thin">
+            {prevItemsToCopy.map((item, index) => {
+              const catName = categories.find(c => c.id === item.category_id)?.name ?? 'Sin Categoría'
+              const conName = concepts.find(c => c.id === item.concept_id)?.name ?? 'Gasto'
+              
+              return (
+                <div 
+                  key={item.id} 
+                  className={clsx(
+                    "flex items-center gap-3 p-3 rounded-xl border transition-all",
+                    item.checked 
+                      ? "bg-slate-800/40 border-slate-700/60" 
+                      : "bg-slate-900/10 border-slate-850/40 opacity-40"
+                  )}
+                >
+                  <input 
+                    type="checkbox" 
+                    className="rounded border-slate-700 bg-slate-800 text-indigo-650 focus:ring-indigo-500 focus:ring-offset-slate-900 w-4.5 h-4.5 cursor-pointer"
+                    checked={item.checked}
+                    onChange={e => {
+                      const updated = [...prevItemsToCopy]
+                      updated[index].checked = e.target.checked
+                      setPrevItemsToCopy(updated)
+                    }}
+                  />
+                  
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{catName}</p>
+                    <p className="text-sm font-medium text-slate-200 truncate mt-0.5">{conName}</p>
+                    <span className={clsx(
+                      "text-[9px] px-1.5 py-0.5 rounded border uppercase tracking-wide font-medium mt-1 inline-block",
+                      item.expense_type === 'variable' 
+                        ? "bg-emerald-500/10 text-emerald-455 border-emerald-500/20" 
+                        : "bg-orange-500/10 text-orange-400 border-orange-500/20"
+                    )}>
+                      {item.expense_type === 'variable' ? 'Sobre / Bolsillo' : 'Obligación'}
+                    </span>
+                  </div>
+
+                  <div className="w-28 flex-shrink-0">
+                    <label className="text-[10px] text-slate-500 block mb-0.5 text-right font-medium">Monto</label>
+                    <CurrencyInput 
+                      className="input w-full text-right py-1 h-8 bg-slate-800 border-slate-700 text-xs font-semibold text-white focus:border-indigo-500"
+                      disabled={!item.checked}
+                      value={item.temp_budget}
+                      onChange={val => {
+                        const updated = [...prevItemsToCopy]
+                        updated[index].temp_budget = val
+                        setPrevItemsToCopy(updated)
+                      }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {createMonth.isError && (
+            <p className="text-red-400 text-sm bg-red-400/10 p-3 rounded-lg mt-2 flex-shrink-0">
+              Error al crear el mes: {createMonth.error?.message || 'Error desconocido'}.
+            </p>
+          )}
+
+          <div className="flex gap-3 justify-end pt-3 border-t border-slate-800/80 flex-shrink-0">
+            <button className="btn-ghost" onClick={() => setStep('config')}>Atrás</button>
+            <button 
+              className="btn-primary" 
+              disabled={createMonth.isPending} 
+              onClick={() => createMonth.mutate(prevItemsToCopy)}
+            >
+              {createMonth.isPending ? 'Creando...' : 'Confirmar y Crear Mes'}
             </button>
           </div>
         </div>
