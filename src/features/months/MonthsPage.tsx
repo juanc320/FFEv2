@@ -118,7 +118,7 @@ export default function MonthsPage() {
     }
     
     // Si no hay mes anterior o no tiene gastos, crear inmediatamente
-    createMonth.mutate()
+    createMonth.mutate(undefined)
   }
 
   const createMonth = useMutation({
