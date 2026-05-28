@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
 import { useAuth } from '@/features/auth/AuthContext'
 import { useActiveMonth } from '@/features/months/MonthsPage'
-import type { MonthlyIncomeItem, DeductionType } from '@/shared/types/database'
+import type { MonthlyIncomeItem, DeductionType, Account } from '@/shared/types/database'
 import { formatCOP, calcNetIncome } from '@/shared/utils/calculations'
 import { Plus, TrendingUp, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
 import clsx from 'clsx'
@@ -24,6 +24,18 @@ function useIncomeItems() {
       return (data ?? []) as MonthlyIncomeItem[]
     },
     enabled: !!activeMonth?.id,
+  })
+}
+
+function useAccounts() {
+  const { profile } = useAuth()
+  return useQuery({
+    queryKey: ['accounts', profile?.family_id],
+    queryFn: async (): Promise<Account[]> => {
+      const { data } = await supabase.from('accounts').select('*').eq('family_id', profile!.family_id!).eq('active', true)
+      return (data ?? []) as Account[]
+    },
+    enabled: !!profile?.family_id,
   })
 }
 
@@ -52,6 +64,7 @@ export default function IncomePage() {
   const qc = useQueryClient()
   const { data: activeMonth } = useActiveMonth()
   const { data: items = [], isLoading } = useIncomeItems()
+  const { data: accounts = [] } = useAccounts()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
 
@@ -77,11 +90,44 @@ export default function IncomePage() {
   })
 
   const markReceived = useMutation({
-    mutationFn: async ({ id, amount, netExpected }: { id: string; amount: number; netExpected: number }) => {
+    mutationFn: async ({ id, amount, netExpected, accountId, label }: { id: string; amount: number; netExpected: number; accountId: string; label: string }) => {
+      // 1. Update income item received amount and status
       const status = amount >= netExpected ? 'received' : 'partial'
       await db.from('monthly_income_items').update({ received_amount: amount, status }).eq('id', id)
+
+      // 2. Create income transaction in database
+      const familyId = profile!.family_id!
+      const userId = profile!.id
+      const today = new Date().toISOString().split('T')[0]
+      const { data: tx, error } = await db.from('transactions').insert({
+        family_id: familyId,
+        month_id: activeMonth!.id,
+        type: 'income',
+        amount: amount,
+        tax_amount: 0,
+        source_account_id: null,
+        destination_account_id: accountId,
+        income_item_id: id,
+        date: today,
+        note: `Ingreso recibido: ${label}`,
+        created_by: userId,
+        is_automatic: false,
+      }).select().single()
+      if (error) throw error
+
+      // 3. Update destination account balance cache
+      const destAcc = accounts.find(a => a.id === accountId)
+      if (destAcc) {
+        await db.from('accounts').update({
+          current_balance_cached: (destAcc.current_balance_cached || 0) + amount
+        }).eq('id', accountId)
+      }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['income_items'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['income_items'] })
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
+    },
   })
 
   const totalExpected = items.reduce((s, i) => s + i.net_expected, 0)
@@ -189,16 +235,22 @@ export default function IncomePage() {
       )}
       <div className="space-y-3">
         {items.map(item => (
-          <IncomeCard key={item.id} item={item} onMarkReceived={(amount) => markReceived.mutate({ id: item.id, amount, netExpected: item.net_expected })} />
+          <IncomeCard 
+            key={item.id} 
+            item={item} 
+            internalAccounts={accounts.filter(a => a.is_internal)}
+            onMarkReceived={(amount, accountId) => markReceived.mutate({ id: item.id, amount, netExpected: item.net_expected, accountId, label: item.label })} 
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function IncomeCard({ item, onMarkReceived }: { item: MonthlyIncomeItem; onMarkReceived: (amount: number) => void }) {
+function IncomeCard({ item, internalAccounts, onMarkReceived }: { item: MonthlyIncomeItem; internalAccounts: Account[]; onMarkReceived: (amount: number, accountId: string) => void }) {
   const [receiving, setReceiving] = useState(false)
   const [amount, setAmount] = useState(item.net_expected)
+  const [accountId, setAccountId] = useState('')
 
   const statusIcon = item.status === 'received'
     ? <CheckCircle size={16} className="text-emerald-400" />
@@ -233,14 +285,25 @@ function IncomeCard({ item, onMarkReceived }: { item: MonthlyIncomeItem; onMarkR
         )}
       </div>
       {receiving && (
-        <div className="border-t border-slate-800 px-4 py-3 bg-slate-900/50 flex items-center gap-3">
-          <div className="flex-1">
-            <label className="label text-xs">Monto recibido neto</label>
-            <CurrencyInput className="input w-full py-2" value={amount} onChange={val => setAmount(val)} />
+        <div className="border-t border-slate-800 px-4 py-3 bg-slate-900/50 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="label text-xs">Monto recibido neto</label>
+              <CurrencyInput className="input w-full py-1.5 h-9 bg-slate-800 border-slate-700 text-xs text-white" value={amount} onChange={val => setAmount(val)} />
+            </div>
+            <div>
+              <label className="label text-xs">Cuenta destino</label>
+              <select className="input w-full py-1.5 h-9 bg-slate-800 border-slate-700 text-xs text-white" value={accountId} onChange={e => setAccountId(e.target.value)}>
+                <option value="">Seleccionar cuenta...</option>
+                {internalAccounts.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div className="flex gap-2 pt-5">
-            <button className="btn-ghost text-sm py-2" onClick={() => setReceiving(false)}>Cancelar</button>
-            <button className="btn-primary text-sm py-2" onClick={() => { onMarkReceived(amount); setReceiving(false) }}>Confirmar</button>
+          <div className="flex gap-2 justify-end">
+            <button className="btn-ghost text-xs py-1.5 px-3" onClick={() => setReceiving(false)}>Cancelar</button>
+            <button className="btn-primary text-xs py-1.5 px-3" disabled={!accountId} onClick={() => { onMarkReceived(amount, accountId); setReceiving(false) }}>Confirmar</button>
           </div>
         </div>
       )}

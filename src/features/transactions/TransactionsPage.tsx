@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
 import { useAuth } from '@/features/auth/AuthContext'
 import { useActiveMonth } from '@/features/months/MonthsPage'
-import type { Transaction, Account, MonthlyExpenseItem, Category, Concept } from '@/shared/types/database'
+import type { Transaction, Account, MonthlyExpenseItem, MonthlyIncomeItem, Category, Concept } from '@/shared/types/database'
 import { formatCOP, calc4x1000, calcEnvelopeAvailable } from '@/shared/utils/calculations'
 import { Plus, ArrowLeftRight, TrendingUp, TrendingDown, AlertTriangle, Zap, Trash2, ChevronDown } from 'lucide-react'
 import clsx from 'clsx'
@@ -74,6 +74,18 @@ function useExpenseItems() {
   })
 }
 
+function useIncomeItems() {
+  const { data: activeMonth } = useActiveMonth()
+  return useQuery({
+    queryKey: ['income_items', activeMonth?.id],
+    queryFn: async (): Promise<MonthlyIncomeItem[]> => {
+      const { data } = await supabase.from('monthly_income_items').select('*').eq('month_id', activeMonth!.id)
+      return (data ?? []) as MonthlyIncomeItem[]
+    },
+    enabled: !!activeMonth?.id,
+  })
+}
+
 const EMPTY_FORM = {
   mode: 'expense' as TxMode,
   amount: 0,
@@ -84,6 +96,7 @@ const EMPTY_FORM = {
   category_id: '',
   concept_id: '',
   expense_item_id: '',
+  income_item_id: '',
   note: '',
 }
 
@@ -95,6 +108,7 @@ export default function TransactionsPage() {
   const { data: transactions = [], isLoading } = useTransactions()
   const { data: accounts = [] } = useAccounts()
   const { data: expenseItems = [] } = useExpenseItems()
+  const { data: incomeItems = [] } = useIncomeItems()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [envelopeAlert, setEnvelopeAlert] = useState<{ shortfall: number; itemId: string } | null>(null)
@@ -122,6 +136,20 @@ export default function TransactionsPage() {
         category_id: !!location.state.prefillCategoryId,
         concept_id: !!location.state.prefillConceptId,
         expense_item_id: !!location.state.prefillExpenseId,
+        amount: !!location.state.prefillAmount,
+      })
+      window.history.replaceState({}, document.title)
+      window.scrollTo(0, 0)
+    } else if (location.state?.prefillIncomeId) {
+      setShowForm(true)
+      setForm(f => ({
+        ...f,
+        mode: 'income',
+        income_item_id: location.state.prefillIncomeId,
+        amount: location.state.prefillAmount || 0,
+      }))
+      setPrefilledFields({
+        income_item_id: !!location.state.prefillIncomeId,
         amount: !!location.state.prefillAmount,
       })
       window.history.replaceState({}, document.title)
@@ -191,6 +219,7 @@ export default function TransactionsPage() {
         category_id: form.category_id || null,
         concept_id: form.concept_id || null,
         expense_item_id: form.expense_item_id || null,
+        income_item_id: form.mode === 'income' ? (form.income_item_id || null) : null,
         date: form.date,
         note: form.note || null,
         created_by: userId,
@@ -232,11 +261,30 @@ export default function TransactionsPage() {
           executed_amount_cached: selectedItem.executed_amount_cached + form.amount,
         }).eq('id', form.expense_item_id)
       }
+
+      // Update income item received cache
+      if (form.income_item_id && form.mode === 'income') {
+        const { data: incItem } = await db.from('monthly_income_items')
+          .select('*')
+          .eq('id', form.income_item_id)
+          .single()
+        
+        if (incItem) {
+          const newReceived = (Number(incItem.received_amount) || 0) + form.amount
+          const netExpected = Number(incItem.net_expected) || 0
+          const newStatus = newReceived >= netExpected ? 'received' : 'partial'
+          await db.from('monthly_income_items').update({
+            received_amount: newReceived,
+            status: newStatus
+          }).eq('id', form.income_item_id)
+        }
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['accounts'] })
       qc.invalidateQueries({ queryKey: ['expense_items'] })
+      qc.invalidateQueries({ queryKey: ['income_items'] })
       setShowForm(false)
       setForm(EMPTY_FORM)
       setEnvelopeAlert(null)
@@ -265,6 +313,17 @@ export default function TransactionsPage() {
         if (item) await db.from('monthly_expense_items').update({ executed_amount_cached: item.executed_amount_cached - Number(oldTx.amount) }).eq('id', item.id)
       }
 
+      // Revert old received cache for income
+      if (oldTx.income_item_id && oldTx.type === 'income') {
+        const { data: oldIncItem } = await db.from('monthly_income_items').select('*').eq('id', oldTx.income_item_id).single()
+        if (oldIncItem) {
+          const newReceived = Math.max(0, (Number(oldIncItem.received_amount) || 0) - Number(oldTx.amount))
+          const netExpected = Number(oldIncItem.net_expected) || 0
+          const newStatus = newReceived >= netExpected ? 'received' : newReceived > 0 ? 'partial' : 'pending'
+          await db.from('monthly_income_items').update({ received_amount: newReceived, status: newStatus }).eq('id', oldTx.income_item_id)
+        }
+      }
+
       // 3. Delete old 4x1000 tax transaction if it existed
       if (oldTx.tax_amount > 0) {
         await db.from('transactions').delete().eq('parent_transaction_id', oldTx.id)
@@ -284,6 +343,7 @@ export default function TransactionsPage() {
         category_id: newValues.category_id || null,
         concept_id: newValues.concept_id || null,
         expense_item_id: newValues.expense_item_id || null,
+        income_item_id: oldTx.type === 'income' ? (newValues.income_item_id || null) : null,
         date: newValues.date,
         note: newValues.note || null,
       }).eq('id', oldTx.id).select().single()
@@ -331,11 +391,23 @@ export default function TransactionsPage() {
           await db.from('monthly_expense_items').update({ executed_amount_cached: baseExecuted + Number(newValues.amount) }).eq('id', item.id)
         }
       }
+
+      // 9. Apply new received cache for income
+      if (newValues.income_item_id && oldTx.type === 'income') {
+        const { data: newIncItem } = await db.from('monthly_income_items').select('*').eq('id', newValues.income_item_id).single()
+        if (newIncItem) {
+          const newReceived = (Number(newIncItem.received_amount) || 0) + Number(newValues.amount)
+          const netExpected = Number(newIncItem.net_expected) || 0
+          const newStatus = newReceived >= netExpected ? 'received' : 'partial'
+          await db.from('monthly_income_items').update({ received_amount: newReceived, status: newStatus }).eq('id', newValues.income_item_id)
+        }
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['accounts'] })
       qc.invalidateQueries({ queryKey: ['expense_items'] })
+      qc.invalidateQueries({ queryKey: ['income_items'] })
       setExpandedTxId(null)
       setEditForm(null)
     },
@@ -358,6 +430,15 @@ export default function TransactionsPage() {
         const item = expenseItems.find(i => i.id === tx.expense_item_id)
         if (item) await db.from('monthly_expense_items').update({ executed_amount_cached: item.executed_amount_cached - tx.amount }).eq('id', item.id)
       }
+      if (tx.income_item_id && tx.type === 'income') {
+        const { data: incItem } = await db.from('monthly_income_items').select('*').eq('id', tx.income_item_id).single()
+        if (incItem) {
+          const newReceived = Math.max(0, (Number(incItem.received_amount) || 0) - tx.amount)
+          const netExpected = Number(incItem.net_expected) || 0
+          const newStatus = newReceived >= netExpected ? 'received' : newReceived > 0 ? 'partial' : 'pending'
+          await db.from('monthly_income_items').update({ received_amount: newReceived, status: newStatus }).eq('id', tx.income_item_id)
+        }
+      }
       if (tx.tax_amount > 0) {
         await db.from('transactions').delete().eq('parent_transaction_id', tx.id)
       }
@@ -367,6 +448,7 @@ export default function TransactionsPage() {
       qc.invalidateQueries({ queryKey: ['transactions'] })
       qc.invalidateQueries({ queryKey: ['accounts'] })
       qc.invalidateQueries({ queryKey: ['expense_items'] })
+      qc.invalidateQueries({ queryKey: ['income_items'] })
     }
   })
 
@@ -529,6 +611,26 @@ export default function TransactionsPage() {
               </>
             )}
 
+            {/* Ingreso esperado */}
+            {form.mode === 'income' && (
+              <div className="sm:col-span-2">
+                <label className="label">Ingreso esperado (opcional)</label>
+                <select 
+                  className={clsx("input w-full", prefilledFields.income_item_id && "opacity-60 border-slate-700/50 bg-slate-800/40 text-slate-450 hover:opacity-85 focus:opacity-100 transition-opacity")} 
+                  value={form.income_item_id} 
+                  onChange={e => {
+                    setForm(f => ({ ...f, income_item_id: e.target.value }))
+                    if (prefilledFields.income_item_id) setPrefilledFields(prev => ({ ...prev, income_item_id: false }))
+                  }}
+                >
+                  <option value="">Ninguno / Ingreso no previsto</option>
+                  {incomeItems.map(i => (
+                    <option key={i.id} value={i.id}>{i.label} (Esperado: {formatCOP(i.net_expected)})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Adjustment note */}
             {form.mode === 'adjustment' && (
               <div className="sm:col-span-2">
@@ -646,7 +748,8 @@ export default function TransactionsPage() {
                       expense_item_id: tx.expense_item_id || '',
                       source_account_id: tx.source_account_id || '',
                       destination_account_id: tx.destination_account_id || '',
-                      external_party_label: tx.external_party_label || ''
+                      external_party_label: tx.external_party_label || '',
+                      income_item_id: tx.income_item_id || '',
                     })
                   }
                 }}
@@ -715,6 +818,22 @@ export default function TransactionsPage() {
                             >
                               <option value="">Seleccionar...</option>
                               {internalAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Ingreso esperado (solo para ingresos) */}
+                        {tx.type === 'income' && (
+                          <div className="sm:col-span-2">
+                            <label className="text-xs text-slate-400 block mb-1">Ingreso esperado (opcional)</label>
+                            <select className="input w-full px-3 py-1.5 text-sm bg-slate-800 border-slate-700 text-white" 
+                              value={editForm.income_item_id} 
+                              onChange={e => setEditForm({ ...editForm, income_item_id: e.target.value })}
+                            >
+                              <option value="">Ninguno / Ingreso no previsto</option>
+                              {incomeItems.map(i => (
+                                <option key={i.id} value={i.id}>{i.label} (Esperado: {formatCOP(i.net_expected)})</option>
+                              ))}
                             </select>
                           </div>
                         )}
