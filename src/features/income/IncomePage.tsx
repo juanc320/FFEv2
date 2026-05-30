@@ -162,6 +162,35 @@ export default function IncomePage() {
       {showForm && (
         <div className="card border-emerald-500/30 space-y-4">
           <h2 className="text-white font-semibold">Nuevo ingreso esperado</h2>
+          
+          {/* Conceptos prediseñados */}
+          <div className="space-y-1.5 p-3 rounded-xl bg-slate-900/30 border border-slate-800/40">
+            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Conceptos prediseñados rápidos</span>
+            <div className="flex gap-2 flex-wrap mt-1">
+              <button 
+                type="button" 
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/40 text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
+                onClick={() => setForm(f => ({ ...f, label: 'Salario basico Juan', gross_amount: 3088000 }))}
+              >
+                Salario Juan ($3.088.000)
+              </button>
+              <button 
+                type="button" 
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/40 text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
+                onClick={() => setForm(f => ({ ...f, label: 'Salario basico Diana', gross_amount: 5808000 }))}
+              >
+                Salario Diana ($5.808.000)
+              </button>
+              <button 
+                type="button" 
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/40 text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
+                onClick={() => setForm(f => ({ ...f, label: 'Arriendo Argo', gross_amount: 1112500 }))}
+              >
+                Arriendo Argo ($1.112.500)
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
               <label className="label">Nombre / descripción</label>
