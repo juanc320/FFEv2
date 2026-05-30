@@ -43,14 +43,44 @@ export function useActiveMonth() {
   })
 }
 
+function getDueDateForAccountingMonth(year: number, month: number, dueDay: number): string {
+  let targetYear = year
+  let targetMonth = month
+  
+  if (dueDay >= 30) {
+    targetMonth = month - 1
+    if (targetMonth === 0) {
+      targetMonth = 12
+      targetYear = year - 1
+    }
+  }
+  
+  const lastDayOfTargetMonth = new Date(targetYear, targetMonth, 0).getDate()
+  const validDay = Math.min(dueDay, lastDayOfTargetMonth)
+  
+  return `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(validDay).padStart(2, '0')}`
+}
+
 export default function MonthsPage() {
   const { profile } = useAuth()
   const qc = useQueryClient()
   const { data: months = [], isLoading } = useBudgetMonths()
   const [showForm, setShowForm] = useState(false)
   const now = new Date()
-  const [year, setYear] = useState(now.getFullYear())
-  const [month, setMonth] = useState(now.getMonth() + 1)
+  const currentDay = now.getDate()
+  let initialYear = now.getFullYear()
+  let initialMonth = now.getMonth() + 1
+
+  if (currentDay >= 30) {
+    initialMonth += 1
+    if (initialMonth > 12) {
+      initialMonth = 1
+      initialYear += 1
+    }
+  }
+
+  const [year, setYear] = useState(initialYear)
+  const [month, setMonth] = useState(initialMonth)
   
   // Asistente de creación de mes
   const [step, setStep] = useState<'config' | 'preview' | 'onboarding_incomes'>('config')
@@ -169,9 +199,7 @@ export default function MonthsPage() {
             let newExpectedDate = null
             if (inc.expected_date) {
               const day = parseInt(inc.expected_date.split('-')[2], 10)
-              const lastDayOfMonth = new Date(year, month, 0).getDate()
-              const validDay = Math.min(day, lastDayOfMonth)
-              newExpectedDate = `${year}-${String(month).padStart(2, '0')}-${String(validDay).padStart(2, '0')}`
+              newExpectedDate = getDueDateForAccountingMonth(year, month, day)
             }
 
             return {
@@ -232,9 +260,7 @@ export default function MonthsPage() {
             let newDueDate = item.due_date
             if (item.due_date) {
               const day = parseInt(item.due_date.split('-')[2], 10)
-              const lastDayOfMonth = new Date(year, month, 0).getDate()
-              const validDay = Math.min(day, lastDayOfMonth)
-              newDueDate = `${year}-${String(month).padStart(2, '0')}-${String(validDay).padStart(2, '0')}`
+              newDueDate = getDueDateForAccountingMonth(year, month, day)
             }
 
             return {
@@ -315,9 +341,7 @@ export default function MonthsPage() {
 
           if (periodicToInject.length > 0) {
             const periodicExpenseItems = periodicToInject.map((p: any) => {
-              const lastDayOfMonth = new Date(year, month, 0).getDate()
-              const dueDay = p.due_day ? Math.min(p.due_day, lastDayOfMonth) : null
-              const dueDate = dueDay ? `${year}-${String(month).padStart(2, '0')}-${String(dueDay).padStart(2, '0')}` : null
+              const dueDate = p.due_day ? getDueDateForAccountingMonth(year, month, p.due_day) : null
               return {
                 family_id: profile!.family_id!,
                 month_id: newMonth.id,
