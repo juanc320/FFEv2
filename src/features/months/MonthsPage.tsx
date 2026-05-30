@@ -5,7 +5,7 @@ import { db } from '@/lib/db'
 import { useAuth } from '@/features/auth/AuthContext'
 import type { BudgetMonth, Category, Concept } from '@/shared/types/database'
 import { monthName } from '@/shared/utils/calculations'
-import { Calendar, Plus, Lock, ChevronRight, ChevronDown, Tag } from 'lucide-react'
+import { Calendar, Plus, Lock, ChevronRight, ChevronDown, Tag, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
@@ -53,9 +53,17 @@ export default function MonthsPage() {
   const [month, setMonth] = useState(now.getMonth() + 1)
   
   // Asistente de creación de mes
-  const [step, setStep] = useState<'config' | 'preview'>('config')
+  const [step, setStep] = useState<'config' | 'preview' | 'onboarding_incomes'>('config')
   const [prevItemsToCopy, setPrevItemsToCopy] = useState<any[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // Plantillas de ingresos recurrentes iniciales (onboarding)
+  const INITIAL_INCOME_TEMPLATES = [
+    { id: 'template-juan', label: 'Salario básico Juan', gross_amount: 3088000, checked: true },
+    { id: 'template-diana', label: 'Salario básico Diana', gross_amount: 5808000, checked: true },
+    { id: 'template-argo', label: 'Arriendo Argo', gross_amount: 1112500, checked: true },
+  ]
+  const [onboardingIncomes, setOnboardingIncomes] = useState<any[]>(INITIAL_INCOME_TEMPLATES)
 
   // Resetear estados al cerrar/abrir formulario
   useEffect(() => {
@@ -63,6 +71,7 @@ export default function MonthsPage() {
       setStep('config')
       setPrevItemsToCopy([])
       setExpandedId(null)
+      setOnboardingIncomes(INITIAL_INCOME_TEMPLATES)
     }
   }, [showForm])
 
@@ -114,15 +123,19 @@ export default function MonthsPage() {
         })))
         setStep('preview')
         return
+      } else {
+        // Si hay mes anterior pero no tiene gastos, crear de inmediato (copiando ingresos recurrentes)
+        createMonth.mutate({ customItems: [] })
       }
+    } else {
+      // Si no hay mes anterior (es el primer mes / onboarding)
+      // Mostrar paso de onboarding de ingresos recurrentes
+      setStep('onboarding_incomes')
     }
-    
-    // Si no hay mes anterior o no tiene gastos, crear inmediatamente
-    createMonth.mutate(undefined)
   }
 
   const createMonth = useMutation({
-    mutationFn: async (customItems?: any[]) => {
+    mutationFn: async ({ customItems, initialIncomes }: { customItems?: any[]; initialIncomes?: any[] } = {}) => {
       // Find previous month (usually the most recent one)
       const { data: prevMonths } = await db.from('budget_months')
         .select('id')
@@ -144,6 +157,60 @@ export default function MonthsPage() {
 
       if (error) throw error
 
+      // 1. Si hay un mes anterior, copiar automáticamente ingresos recurrentes (is_recurring = true)
+      if (prevMonthId && newMonth) {
+        const { data: prevIncomes } = await db.from('monthly_income_items')
+          .select('*')
+          .eq('month_id', prevMonthId)
+          .eq('is_recurring', true)
+
+        if (prevIncomes && prevIncomes.length > 0) {
+          const newIncomesToInsert = prevIncomes.map((inc: any) => {
+            let newExpectedDate = null
+            if (inc.expected_date) {
+              const day = parseInt(inc.expected_date.split('-')[2], 10)
+              const lastDayOfMonth = new Date(year, month, 0).getDate()
+              const validDay = Math.min(day, lastDayOfMonth)
+              newExpectedDate = `${year}-${String(month).padStart(2, '0')}-${String(validDay).padStart(2, '0')}`
+            }
+
+            return {
+              month_id: newMonth.id,
+              family_id: profile!.family_id!,
+              label: inc.label,
+              gross_amount: inc.gross_amount,
+              deduction_type: inc.deduction_type,
+              deduction_rate: inc.deduction_rate,
+              deduction_amount: inc.deduction_amount,
+              expected_date: newExpectedDate,
+              received_amount: 0,
+              status: 'pending',
+              is_recurring: true,
+            }
+          })
+          await db.from('monthly_income_items').insert(newIncomesToInsert)
+        }
+      }
+
+      // 2. Si se pasaron ingresos iniciales (onboarding primer mes)
+      if (newMonth && initialIncomes && initialIncomes.length > 0) {
+        const incomesToInsert = initialIncomes.map((inc: any) => ({
+          month_id: newMonth.id,
+          family_id: profile!.family_id!,
+          label: inc.label,
+          gross_amount: Number(inc.gross_amount) || 0,
+          deduction_type: 'none',
+          deduction_rate: 0,
+          deduction_amount: 0,
+          expected_date: null,
+          received_amount: 0,
+          status: 'pending',
+          is_recurring: true,
+        }))
+        await db.from('monthly_income_items').insert(incomesToInsert)
+      }
+
+      // 3. Copiar gastos si hay mes anterior
       if (prevMonthId && newMonth) {
         // Usar los ítems seleccionados y personalizados por el usuario
         const itemsToInsert = customItems
@@ -230,7 +297,7 @@ export default function MonthsPage() {
         }
       }
 
-      // Inyección automática de gastos periódicos
+      // 4. Inyección automática de gastos periódicos
       if (newMonth) {
         const { data: periodicItems } = await db.from('periodic_expenses')
           .select('*')
@@ -445,7 +512,117 @@ export default function MonthsPage() {
             <button 
               className="btn-primary" 
               disabled={createMonth.isPending} 
-              onClick={() => createMonth.mutate(prevItemsToCopy)}
+              onClick={() => createMonth.mutate({ customItems: prevItemsToCopy })}
+            >
+              {createMonth.isPending ? 'Creando...' : 'Confirmar y Crear Mes'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showForm && step === 'onboarding_incomes' && (
+        <div className="card border-indigo-500/30 space-y-4 max-h-[85vh] flex flex-col">
+          <div className="flex-shrink-0">
+            <h2 className="text-white font-semibold">Configuración de Ingresos Recurrentes</h2>
+            <p className="text-slate-400 text-xs mt-1">
+              Establece las fuentes de ingresos mensuales de tu hogar. Se crearán como plantillas que se copiarán mes a mes.
+            </p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 max-h-[50vh] min-h-[150px] scrollbar-thin">
+            {onboardingIncomes.map((item, index) => (
+              <div 
+                key={item.id} 
+                className={clsx(
+                  "flex items-center gap-3 p-3 rounded-xl border transition-all",
+                  item.checked 
+                    ? "bg-slate-800/40 border-slate-700/60" 
+                    : "bg-slate-900/10 border-slate-850/40 opacity-40"
+                )}
+              >
+                <input 
+                  type="checkbox" 
+                  className="rounded border-slate-700 bg-slate-800 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-slate-900 w-5 h-5 cursor-pointer accent-indigo-500"
+                  checked={item.checked}
+                  onChange={e => {
+                    const updated = [...onboardingIncomes]
+                    updated[index].checked = e.target.checked
+                    setOnboardingIncomes(updated)
+                  }}
+                />
+                
+                <div className="flex-1 min-w-0">
+                  <label className="text-[10px] text-slate-500 block mb-0.5 font-medium">Concepto</label>
+                  <input 
+                    type="text" 
+                    className="input w-full py-1 h-8 bg-slate-800 border-slate-700 text-xs font-semibold text-white focus:border-indigo-500"
+                    disabled={!item.checked}
+                    value={item.label}
+                    onChange={e => {
+                      const updated = [...onboardingIncomes]
+                      updated[index].label = e.target.value
+                      setOnboardingIncomes(updated)
+                    }}
+                    placeholder="Nombre del ingreso"
+                  />
+                </div>
+
+                <div className="w-32 flex-shrink-0">
+                  <label className="text-[10px] text-slate-500 block mb-0.5 text-right font-medium">Monto Esperado</label>
+                  <CurrencyInput 
+                    className="input w-full text-right py-1 h-8 bg-slate-800 border-slate-700 text-xs font-semibold text-white focus:border-indigo-500"
+                    disabled={!item.checked}
+                    value={item.gross_amount}
+                    onChange={val => {
+                      const updated = [...onboardingIncomes]
+                      updated[index].gross_amount = val
+                      setOnboardingIncomes(updated)
+                    }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  className="p-1.5 mt-4 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all self-center"
+                  onClick={() => {
+                    setOnboardingIncomes(onboardingIncomes.filter(i => i.id !== item.id))
+                  }}
+                  title="Eliminar ingreso"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-medium text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 hover:border-indigo-500/30 rounded-xl transition-all self-start mt-2"
+            onClick={() => {
+              setOnboardingIncomes([
+                ...onboardingIncomes,
+                { id: `custom-${Date.now()}`, label: '', gross_amount: 0, checked: true }
+              ])
+            }}
+          >
+            <Plus size={14} /> Agregar otro ingreso
+          </button>
+
+          {createMonth.isError && (
+            <p className="text-red-400 text-sm bg-red-400/10 p-3 rounded-lg mt-2 flex-shrink-0">
+              Error al crear el mes: {createMonth.error?.message || 'Error desconocido'}.
+            </p>
+          )}
+
+          <div className="flex gap-3 justify-end pt-3 border-t border-slate-800/80 flex-shrink-0">
+            <button className="btn-ghost" onClick={() => setStep('config')}>Atrás</button>
+            <button 
+              className="btn-primary" 
+              disabled={createMonth.isPending} 
+              onClick={() => {
+                const validIncomes = onboardingIncomes.filter(i => i.checked && i.label.trim() !== '')
+                createMonth.mutate({ initialIncomes: validIncomes })
+              }}
             >
               {createMonth.isPending ? 'Creando...' : 'Confirmar y Crear Mes'}
             </button>

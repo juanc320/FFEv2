@@ -6,7 +6,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { useActiveMonth } from '@/features/months/MonthsPage'
 import type { MonthlyIncomeItem, DeductionType, Account } from '@/shared/types/database'
 import { formatCOP, calcNetIncome } from '@/shared/utils/calculations'
-import { Plus, TrendingUp, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { Plus, TrendingUp, AlertTriangle, CheckCircle, Clock, Pencil, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
@@ -67,6 +67,7 @@ export default function IncomePage() {
   const { data: accounts = [] } = useAccounts()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [editingItem, setEditingItem] = useState<MonthlyIncomeItem | null>(null)
 
   const netPreview = calcNetIncome(form.gross_amount, form.deduction_type, form.deduction_rate, form.deduction_amount)
 
@@ -88,6 +89,58 @@ export default function IncomePage() {
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['income_items'] }); setShowForm(false); setForm(EMPTY_FORM) },
   })
+
+  const updateItem = useMutation({
+    mutationFn: async () => {
+      const { error } = await db.from('monthly_income_items').update({
+        label: form.label,
+        gross_amount: form.gross_amount,
+        deduction_type: form.deduction_type,
+        deduction_rate: form.deduction_rate,
+        deduction_amount: form.deduction_amount,
+        expected_date: form.expected_date || null,
+        is_recurring: form.is_recurring,
+      }).eq('id', editingItem!.id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['income_items'] })
+      setShowForm(false)
+      setEditingItem(null)
+      setForm(EMPTY_FORM)
+    }
+  })
+
+  const deleteItem = useMutation({
+    mutationFn: async (id: string) => {
+      // Unlink any transactions pointing to this income item
+      await db.from('transactions').update({ income_item_id: null }).eq('income_item_id', id)
+      // Delete the income item
+      const { error } = await db.from('monthly_income_items').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['income_items'] })
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      setShowForm(false)
+      setEditingItem(null)
+      setForm(EMPTY_FORM)
+    }
+  })
+
+  const handleEdit = (item: MonthlyIncomeItem) => {
+    setEditingItem(item)
+    setForm({
+      label: item.label,
+      gross_amount: item.gross_amount,
+      deduction_type: item.deduction_type,
+      deduction_rate: item.deduction_rate,
+      deduction_amount: item.deduction_amount,
+      expected_date: item.expected_date || '',
+      is_recurring: item.is_recurring,
+    })
+    setShowForm(true)
+  }
 
   const markReceived = useMutation({
     mutationFn: async ({ id, amount, netExpected, accountId, label }: { id: string; amount: number; netExpected: number; accountId: string; label: string }) => {
@@ -153,43 +206,46 @@ export default function IncomePage() {
             {' '}/ Esperado: <span className="text-indigo-400 font-medium">{formatCOP(totalExpected)}</span>
           </p>
         </div>
-        <button className="btn-primary flex items-center gap-2" onClick={() => setShowForm(true)}>
+        <button className="btn-primary flex items-center gap-2" onClick={() => { setEditingItem(null); setForm(EMPTY_FORM); setShowForm(true); }}>
           <Plus size={16} /> Nuevo ingreso
         </button>
       </div>
 
-      {/* Formulario */}
       {showForm && (
         <div className="card border-emerald-500/30 space-y-4">
-          <h2 className="text-white font-semibold">Nuevo ingreso esperado</h2>
+          <h2 className="text-white font-semibold">
+            {editingItem ? 'Editar ingreso esperado' : 'Nuevo ingreso esperado'}
+          </h2>
           
-          {/* Conceptos prediseñados */}
-          <div className="space-y-1.5 p-3 rounded-xl bg-slate-900/30 border border-slate-800/40">
-            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Conceptos prediseñados rápidos</span>
-            <div className="flex gap-2 flex-wrap mt-1">
-              <button 
-                type="button" 
-                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/40 text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
-                onClick={() => setForm(f => ({ ...f, label: 'Salario basico Juan', gross_amount: 3088000 }))}
-              >
-                Salario Juan ($3.088.000)
-              </button>
-              <button 
-                type="button" 
-                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/40 text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
-                onClick={() => setForm(f => ({ ...f, label: 'Salario basico Diana', gross_amount: 5808000 }))}
-              >
-                Salario Diana ($5.808.000)
-              </button>
-              <button 
-                type="button" 
-                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/40 text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
-                onClick={() => setForm(f => ({ ...f, label: 'Arriendo Argo', gross_amount: 1112500 }))}
-              >
-                Arriendo Argo ($1.112.500)
-              </button>
+          {/* Conceptos prediseñados rápidos (solo para creación) */}
+          {!editingItem && (
+            <div className="space-y-1.5 p-3 rounded-xl bg-slate-900/30 border border-slate-800/40">
+              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Conceptos prediseñados rápidos</span>
+              <div className="flex gap-2 flex-wrap mt-1">
+                <button 
+                  type="button" 
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/40 text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
+                  onClick={() => setForm(f => ({ ...f, label: 'Salario basico Juan', gross_amount: 3088000 }))}
+                >
+                  Salario Juan ($3.088.000)
+                </button>
+                <button 
+                  type="button" 
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/40 text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
+                  onClick={() => setForm(f => ({ ...f, label: 'Salario basico Diana', gross_amount: 5808000 }))}
+                >
+                  Salario Diana ($5.808.000)
+                </button>
+                <button 
+                  type="button" 
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-800/40 text-slate-300 hover:text-white hover:bg-slate-800 transition-all cursor-pointer"
+                  onClick={() => setForm(f => ({ ...f, label: 'Arriendo Argo', gross_amount: 1112500 }))}
+                >
+                  Arriendo Argo ($1.112.500)
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
@@ -244,11 +300,52 @@ export default function IncomePage() {
             <input type="checkbox" className="w-4 h-4 accent-indigo-500 rounded" checked={form.is_recurring} onChange={e => setForm(f => ({ ...f, is_recurring: e.target.checked }))} />
             <span className="text-slate-300 text-sm">Ingreso recurrente (se copiará al siguiente mes)</span>
           </label>
-          <div className="flex gap-3 justify-end">
-            <button className="btn-ghost" onClick={() => setShowForm(false)}>Cancelar</button>
-            <button className="btn-primary" disabled={!form.label.trim() || form.gross_amount <= 0 || createItem.isPending} onClick={() => createItem.mutate()}>
-              {createItem.isPending ? 'Guardando...' : 'Agregar ingreso'}
-            </button>
+          <div className="flex gap-3 justify-between">
+            <div>
+              {editingItem && (
+                <button
+                  type="button"
+                  className="btn-ghost border border-red-500/40 text-red-400 hover:bg-red-500/10 text-xs py-1.5 px-3 rounded-xl transition-all"
+                  onClick={() => {
+                    if (confirm('¿Estás seguro de que deseas eliminar este ingreso esperado? Las transacciones asociadas ya no estarán vinculadas.')) {
+                      deleteItem.mutate(editingItem.id)
+                    }
+                  }}
+                  disabled={deleteItem.isPending}
+                >
+                  {deleteItem.isPending ? 'Eliminando...' : 'Eliminar'}
+                </button>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <button 
+                type="button"
+                className="btn-ghost" 
+                onClick={() => {
+                  setShowForm(false)
+                  setEditingItem(null)
+                  setForm(EMPTY_FORM)
+                }}
+              >
+                Cancelar
+              </button>
+              <button 
+                type="button"
+                className="btn-primary" 
+                disabled={!form.label.trim() || form.gross_amount <= 0 || createItem.isPending || updateItem.isPending} 
+                onClick={() => {
+                  if (editingItem) {
+                    updateItem.mutate()
+                  } else {
+                    createItem.mutate()
+                  }
+                }}
+              >
+                {editingItem 
+                  ? (updateItem.isPending ? 'Guardando...' : 'Guardar cambios') 
+                  : (createItem.isPending ? 'Guardando...' : 'Agregar ingreso')}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -269,6 +366,7 @@ export default function IncomePage() {
             item={item} 
             internalAccounts={accounts.filter(a => a.is_internal)}
             onMarkReceived={(amount, accountId) => markReceived.mutate({ id: item.id, amount, netExpected: item.net_expected, accountId, label: item.label })} 
+            onEdit={() => handleEdit(item)}
           />
         ))}
       </div>
@@ -276,7 +374,17 @@ export default function IncomePage() {
   )
 }
 
-function IncomeCard({ item, internalAccounts, onMarkReceived }: { item: MonthlyIncomeItem; internalAccounts: Account[]; onMarkReceived: (amount: number, accountId: string) => void }) {
+function IncomeCard({ 
+  item, 
+  internalAccounts, 
+  onMarkReceived,
+  onEdit
+}: { 
+  item: MonthlyIncomeItem; 
+  internalAccounts: Account[]; 
+  onMarkReceived: (amount: number, accountId: string) => void;
+  onEdit: () => void;
+}) {
   const [receiving, setReceiving] = useState(false)
   const [amount, setAmount] = useState(item.net_expected)
   const [accountId, setAccountId] = useState('')
@@ -307,11 +415,21 @@ function IncomeCard({ item, internalAccounts, onMarkReceived }: { item: MonthlyI
           <p className="text-emerald-400 font-semibold text-sm">{formatCOP(item.net_expected)}</p>
           <p className="text-slate-500 text-xs">Bruto: {formatCOP(item.gross_amount)}</p>
         </div>
-        {item.status !== 'received' && (
-          <button className="btn-ghost text-xs py-1.5 px-3 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10" onClick={() => setReceiving(r => !r)}>
-            Recibido
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {item.status !== 'received' && (
+            <button className="btn-ghost text-xs py-1.5 px-3 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10" onClick={() => setReceiving(r => !r)}>
+              Recibido
+            </button>
+          )}
+          <button 
+            type="button"
+            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
+            onClick={onEdit}
+            title="Editar ingreso esperado"
+          >
+            <Pencil size={15} />
           </button>
-        )}
+        </div>
       </div>
       {receiving && (
         <div className="border-t border-slate-800 px-4 py-3 bg-slate-900/50 space-y-3">
