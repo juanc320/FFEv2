@@ -506,7 +506,7 @@ export default function ExpensesPage() {
                         <span className={clsx('text-[10px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider', tag.color)}>
                           {tag.label}
                         </span>
-                        {item.arrears_amount > 0 && (
+                        {item.arrears_amount > 0 && executed < item.arrears_amount && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider bg-red-500/10 text-red-400 border-red-500/20">
                             Mora: {formatCOP(item.arrears_amount)}
                           </span>

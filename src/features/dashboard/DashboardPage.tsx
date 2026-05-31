@@ -364,7 +364,7 @@ export default function DashboardPage() {
                       <span className={clsx("text-[9px] px-1.5 py-0.5 rounded border uppercase tracking-wide font-medium", exp.executed > 0 ? "bg-sky-500/10 text-sky-400 border-sky-500/20" : "bg-orange-500/10 text-orange-400 border-orange-500/20")}>
                         {exp.statusLabel}
                       </span>
-                      {Number(exp.arrears_amount) > 0 && (
+                      {Number(exp.arrears_amount) > 0 && Number(exp.executed) < Number(exp.arrears_amount) && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded border uppercase tracking-wide font-bold bg-red-500/10 text-red-400 border-red-500/20">
                           Mora: {formatCOP(Number(exp.arrears_amount))}
                         </span>
