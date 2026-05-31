@@ -526,19 +526,17 @@ export default function ExpensesPage() {
                       <p className="text-xs text-slate-500 mt-1">
                         {totalDue === 0 ? (
                           <span className="text-slate-400/80">No presupuestado / No aplica este mes</span>
-                        ) : executed > 0 && executed < totalDue ? (
-                          <span>Abonado: <strong className="text-slate-300">{formatCOP(executed)}</strong> · Quedan: <strong className="text-orange-400">{formatCOP(pending)}</strong>{item.arrears_amount > 0 && <span className="text-red-400 font-medium"> (incluye mora)</span>}</span>
                         ) : executed >= totalDue ? (
                           <span className="text-emerald-400/80">Liquidado al 100%</span>
+                        ) : executed > 0 ? (
+                          <span>
+                            Monto original: <strong className="text-slate-300">{formatCOP(item.budget_amount)}</strong>
+                            {' · '}
+                            Abonado: <strong className="text-slate-300">{formatCOP(executed)}</strong>
+                          </span>
                         ) : (
                           <span>
-                            {item.arrears_amount > 0 ? (
-                              <>
-                                Cuota: <strong className="text-slate-300">{formatCOP(item.budget_amount)}</strong> + Mora: <strong className="text-red-400">{formatCOP(item.arrears_amount)}</strong>
-                              </>
-                            ) : (
-                              <>Monto total: <strong className="text-slate-300">{formatCOP(totalDue)}</strong></>
-                            )}
+                            Monto original: <strong className="text-slate-300">{formatCOP(item.budget_amount)}</strong>
                           </span>
                         )}
                       </p>
