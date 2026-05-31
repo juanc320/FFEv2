@@ -528,12 +528,6 @@ export default function ExpensesPage() {
                           <span className="text-slate-400/80">No presupuestado / No aplica este mes</span>
                         ) : executed >= totalDue ? (
                           <span className="text-emerald-400/80">Liquidado al 100%</span>
-                        ) : executed > 0 ? (
-                          <span>
-                            Monto original: <strong className="text-slate-300">{formatCOP(item.budget_amount)}</strong>
-                            {' · '}
-                            Abonado: <strong className="text-slate-300">{formatCOP(executed)}</strong>
-                          </span>
                         ) : (
                           <span>
                             Monto original: <strong className="text-slate-300">{formatCOP(item.budget_amount)}</strong>
