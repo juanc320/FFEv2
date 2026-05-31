@@ -103,6 +103,7 @@ export default function ExpensesPage() {
   const [editForm, setEditForm] = useState<{
     expense_type: 'fixed' | 'variable' | 'sporadic';
     budget_amount: number;
+    arrears_amount: number;
     criticality: 'critical' | 'necessary' | 'desirable' | 'optional';
     due_date: string;
   } | null>(null)
@@ -265,6 +266,7 @@ export default function ExpensesPage() {
     setEditForm({
       expense_type: item.expense_type === 'sporadic' ? 'fixed' : item.expense_type,
       budget_amount: item.budget_amount,
+      arrears_amount: item.arrears_amount || 0,
       criticality: item.criticality,
       due_date: item.due_date || '',
     })
@@ -275,6 +277,7 @@ export default function ExpensesPage() {
     const updates: Partial<MonthlyExpenseItem> = {
       expense_type: editForm.expense_type,
       budget_amount: editForm.budget_amount,
+      arrears_amount: editForm.arrears_amount,
       criticality: editForm.criticality,
       due_date: editForm.expense_type === 'variable' ? null : (editForm.due_date || null),
     }
@@ -566,6 +569,16 @@ export default function ExpensesPage() {
                               onChange={val => setEditForm({ ...editForm, budget_amount: val })}
                             />
                           </div>
+                          {editForm.expense_type !== 'variable' && (
+                            <div>
+                              <label className="text-xs text-slate-400 block mb-1">Mora Acumulada</label>
+                              <CurrencyInput 
+                                className="input w-full text-xs py-1.5 h-8 bg-slate-800 border-slate-750" 
+                                value={editForm.arrears_amount} 
+                                onChange={val => setEditForm({ ...editForm, arrears_amount: val })}
+                              />
+                            </div>
+                          )}
                           {editForm.expense_type !== 'variable' && (
                             <div>
                               <label className="text-xs text-slate-400 block mb-1">Fecha Límite</label>
@@ -922,6 +935,16 @@ export default function ExpensesPage() {
                                 onChange={val => setEditForm({ ...editForm, budget_amount: val })}
                               />
                             </div>
+                            {editForm.expense_type !== 'variable' && (
+                              <div>
+                                <label className="text-xs text-slate-400 block mb-1">Mora Acumulada</label>
+                                <CurrencyInput 
+                                  className="input w-full text-xs py-1.5 h-8 bg-slate-800 border-slate-750 font-bold" 
+                                  value={editForm.arrears_amount} 
+                                  onChange={val => setEditForm({ ...editForm, arrears_amount: val })}
+                                />
+                              </div>
+                            )}
                             {editForm.expense_type !== 'variable' && (
                               <div>
                                 <label className="text-xs text-slate-400 block mb-1">Fecha Límite</label>
