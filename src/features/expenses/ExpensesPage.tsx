@@ -506,6 +506,11 @@ export default function ExpensesPage() {
                         <span className={clsx('text-[10px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider', tag.color)}>
                           {tag.label}
                         </span>
+                        {item.arrears_amount > 0 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider bg-red-500/10 text-red-400 border-red-500/20">
+                            Mora: {formatCOP(item.arrears_amount)}
+                          </span>
+                        )}
                         {item.due_date && (() => {
                           const todayStr = new Date().toISOString().split('T')[0]
                           const isOverdue = !item.postponed && executed < totalDue && item.due_date < todayStr
@@ -522,11 +527,19 @@ export default function ExpensesPage() {
                         {totalDue === 0 ? (
                           <span className="text-slate-400/80">No presupuestado / No aplica este mes</span>
                         ) : executed > 0 && executed < totalDue ? (
-                          <span>Abonado: <strong className="text-slate-300">{formatCOP(executed)}</strong> · Quedan: <strong className="text-orange-400">{formatCOP(pending)}</strong></span>
+                          <span>Abonado: <strong className="text-slate-300">{formatCOP(executed)}</strong> · Quedan: <strong className="text-orange-400">{formatCOP(pending)}</strong>{item.arrears_amount > 0 && <span className="text-red-400 font-medium"> (incluye mora)</span>}</span>
                         ) : executed >= totalDue ? (
                           <span className="text-emerald-400/80">Liquidado al 100%</span>
                         ) : (
-                          <span>Monto total: <strong className="text-slate-300">{formatCOP(totalDue)}</strong></span>
+                          <span>
+                            {item.arrears_amount > 0 ? (
+                              <>
+                                Cuota: <strong className="text-slate-300">{formatCOP(item.budget_amount)}</strong> + Mora: <strong className="text-red-400">{formatCOP(item.arrears_amount)}</strong>
+                              </>
+                            ) : (
+                              <>Monto total: <strong className="text-slate-300">{formatCOP(totalDue)}</strong></>
+                            )}
+                          </span>
                         )}
                       </p>
                     </div>
