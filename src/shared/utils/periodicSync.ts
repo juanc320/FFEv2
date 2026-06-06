@@ -24,8 +24,9 @@ export function getDueDateForAccountingMonth(year: number, month: number, dueDay
 
 /**
  * Sincroniza los gastos periódicos de una familia con el mes presupuestal activo actual.
- * Inserta los que corresponden y no existen, actualiza los que cambiaron y elimina/desactiva
- * los que ya no corresponden.
+ * Agrupa los elementos por concepto para permitir que múltiples gastos periódicos
+ * con la misma categoría y concepto se inserten y actualicen de forma independiente
+ * sin sobrescribirse entre sí.
  */
 export async function syncPeriodicExpenses(familyId: string) {
   if (!familyId) return
@@ -70,68 +71,86 @@ export async function syncPeriodicExpenses(familyId: string) {
     return diffMonths >= 0 && diffMonths % intervalMonths === 0
   })
 
-  // 5. Inyectar o actualizar en el mes activo
+  // 5. Agrupar por concept_id para hacer un emparejamiento posicional
+  const periodicByConcept: Record<string, any[]> = {}
   for (const p of periodicToInject) {
-    const existing = (existingItems as any[]).find((item: any) => item.concept_id === p.concept_id)
-    const dueDate = p.due_day ? getDueDateForAccountingMonth(year, month, p.due_day) : null
-
-    if (!existing) {
-      // Si no existe el ítem, lo creamos
-      await db.from('monthly_expense_items').insert({
-        family_id: familyId,
-        month_id: activeMonth.id,
-        category_id: p.category_id,
-        concept_id: p.concept_id,
-        expense_type: 'sporadic',
-        criticality: p.criticality,
-        due_mode: 'once',
-        due_date: dueDate,
-        budget_amount: p.amount,
-        arrears_amount: 0,
-        executed_amount_cached: 0,
-        deferred_amount: 0,
-        status: 'pending',
-        active_in_month: true,
-      })
-    } else {
-      // Si ya existe, actualizamos si cambiaron los valores clave o si estaba desactivado
-      if (
-        Number(existing.budget_amount) !== Number(p.amount) ||
-        existing.criticality !== p.criticality ||
-        existing.due_date !== dueDate ||
-        !existing.active_in_month
-      ) {
-        await db
-          .from('monthly_expense_items')
-          .update({
-            budget_amount: p.amount,
-            criticality: p.criticality,
-            due_date: dueDate,
-            active_in_month: true,
-          })
-          .eq('id', existing.id)
-      }
-    }
+    if (!periodicByConcept[p.concept_id]) periodicByConcept[p.concept_id] = []
+    periodicByConcept[p.concept_id].push(p)
   }
 
-  // 6. Eliminar o desactivar los ítems mensuales del mes activo que ya no corresponden
-  // (porque el gasto periódico fue desactivado, eliminado o se cambió su mes/periodicidad)
+  const existingByConcept: Record<string, any[]> = {}
   for (const item of (existingItems as any[])) {
-    const stillApplies = periodicToInject.some((p: any) => p.concept_id === item.concept_id)
-    if (!stillApplies) {
-      if (Number(item.executed_amount_cached) === 0) {
-        // No tiene transacciones asociadas, se puede eliminar de forma segura
-        await db
-          .from('monthly_expense_items')
-          .delete()
-          .eq('id', item.id)
-      } else {
-        // Ya tiene transacciones, no lo eliminamos para no dañar los registros históricos,
-        // pero lo desactivamos para este mes actual.
-        await db
-          .from('monthly_expense_items')
-          .update({ active_in_month: false })
-          .eq('id', item.id)
+    if (!existingByConcept[item.concept_id]) existingByConcept[item.concept_id] = []
+    existingByConcept[item.concept_id].push(item)
+  }
+
+  // Obtener todos los concept_ids únicos involucrados
+  const allConcepts = new Set([
+    ...Object.keys(periodicByConcept),
+    ...Object.keys(existingByConcept)
+  ])
+
+  // 6. Sincronizar cada concepto
+  for (const conceptId of allConcepts) {
+    const P_c = periodicByConcept[conceptId] || []
+    const E_c = existingByConcept[conceptId] || []
+    const limit = Math.max(P_c.length, E_c.length)
+
+    for (let i = 0; i < limit; i++) {
+      const p = P_c[i]
+      const existing = E_c[i]
+
+      if (p && !existing) {
+        // Insertar nuevo ítem para este concepto en el mes
+        const dueDate = p.due_day ? getDueDateForAccountingMonth(year, month, p.due_day) : null
+        await db.from('monthly_expense_items').insert({
+          family_id: familyId,
+          month_id: activeMonth.id,
+          category_id: p.category_id,
+          concept_id: p.concept_id,
+          expense_type: 'sporadic',
+          criticality: p.criticality,
+          due_mode: 'once',
+          due_date: dueDate,
+          budget_amount: p.amount,
+          arrears_amount: 0,
+          executed_amount_cached: 0,
+          deferred_amount: 0,
+          status: 'pending',
+          active_in_month: true,
+        })
+      } else if (p && existing) {
+        // Actualizar el ítem existente si difieren los valores clave
+        const dueDate = p.due_day ? getDueDateForAccountingMonth(year, month, p.due_day) : null
+        if (
+          Number(existing.budget_amount) !== Number(p.amount) ||
+          existing.criticality !== p.criticality ||
+          existing.due_date !== dueDate ||
+          !existing.active_in_month
+        ) {
+          await db
+            .from('monthly_expense_items')
+            .update({
+              budget_amount: p.amount,
+              criticality: p.criticality,
+              due_date: dueDate,
+              active_in_month: true,
+            })
+            .eq('id', existing.id)
+        }
+      } else if (!p && existing) {
+        // Eliminar o desactivar el ítem sobrante
+        if (Number(existing.executed_amount_cached) === 0) {
+          await db
+            .from('monthly_expense_items')
+            .delete()
+            .eq('id', existing.id)
+        } else if (existing.active_in_month) {
+          await db
+            .from('monthly_expense_items')
+            .update({ active_in_month: false })
+            .eq('id', existing.id)
+        }
       }
     }
   }
