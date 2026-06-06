@@ -851,7 +851,11 @@ export default function ExpensesPage() {
                         <span className={clsx('text-[10px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider', tag.color)}>
                           {tag.label}
                         </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded border border-slate-800 text-slate-400 bg-slate-800/20">
+                        <span className={clsx('text-[10px] px-1.5 py-0.5 rounded border font-medium',
+                          available < 0 
+                            ? 'border-red-500/30 text-red-400 bg-red-500/10'
+                            : 'border-slate-800 text-slate-400 bg-slate-800/20'
+                        )}>
                           Disponible: {formatCOP(available)}
                         </span>
                       </div>
@@ -871,7 +875,7 @@ export default function ExpensesPage() {
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-white text-sm font-semibold">{formatCOP(available)}</p>
+                      <p className={clsx('text-sm font-semibold', available < 0 ? 'text-red-400' : 'text-white')}>{formatCOP(available)}</p>
                       <p className="text-slate-500 text-xs">Disponible</p>
                     </div>
                     <ChevronDown size={15} className={clsx('text-slate-500 transition-transform', isExpanded && 'rotate-180')} />

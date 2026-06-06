@@ -198,14 +198,8 @@ export default function TransactionsPage() {
       const familyId = profile!.family_id!
       const userId = profile!.id
 
-      // RN-07: Validate envelope
-      if (form.mode === 'expense' && selectedItem) {
-        const avail = calcEnvelopeAvailable(selectedItem.budget_amount, selectedItem.arrears_amount, 0, 0, selectedItem.executed_amount_cached, selectedItem.deferred_amount)
-        if (form.amount > avail) {
-          setEnvelopeAlert({ shortfall: form.amount - avail, itemId: selectedItem.id })
-          throw new Error('envelope_insufficient')
-        }
-      }
+      // Note: We now allow transactions to go over the budget (pockets can go in red).
+      // We only show a warning in the UI instead of throwing and blocking registration.
 
       // Main transaction
       const { data: tx, error } = await db.from('transactions').insert({
@@ -671,16 +665,16 @@ export default function TransactionsPage() {
             </div>
           )}
 
-          {/* Envelope alert */}
-          {envelopeAlert && selectedItem && (
+          {/* Envelope live alert */}
+          {itemAvailable !== null && selectedItem && form.amount > itemAvailable && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">
               <p className="text-red-300 text-sm font-semibold">
                 {selectedItem.expense_type === 'variable' ? '⚠️ Presupuesto insuficiente' : '⚠️ Pago excede el saldo'}
               </p>
               <p className="text-red-400/80 text-xs mt-1">
                 {selectedItem.expense_type === 'variable'
-                  ? `Faltan ${formatCOP(envelopeAlert.shortfall)} en el bolsillo. Ajusta el monto o reasigna desde otro gasto.`
-                  : `El pago ingresado supera por ${formatCOP(envelopeAlert.shortfall)} el saldo pendiente de esta obligación. Ajusta el monto.`}
+                  ? `Faltan ${formatCOP(form.amount - itemAvailable)} en el bolsillo. El movimiento se registrará y el bolsillo quedará en rojo.`
+                  : `El pago ingresado supera por ${formatCOP(form.amount - itemAvailable)} el saldo pendiente de esta obligación.`}
               </p>
             </div>
           )}
