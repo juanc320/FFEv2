@@ -306,7 +306,13 @@ export default function PeriodicExpensesPage() {
                   setForm(f => ({ ...f, category_id: '', concept_id: '' }))
                 } else {
                   setShowNewCategoryInput(false)
-                  setForm(f => ({ ...f, category_id: e.target.value, concept_id: '' }))
+                  const catId = e.target.value
+                  const matchingConcepts = concepts.filter(c => c.category_id === catId)
+                  let nextConceptId = ''
+                  if (matchingConcepts.length === 1) {
+                    nextConceptId = matchingConcepts[0].id
+                  }
+                  setForm(f => ({ ...f, category_id: catId, concept_id: nextConceptId }))
                   setShowNewConceptInput(false)
                 }
               }}>
@@ -506,7 +512,13 @@ export default function PeriodicExpensesPage() {
                           setEditForm(f => ({ ...f, category_id: '', concept_id: '' }))
                         } else {
                           setShowEditNewCategoryInput(prev => ({ ...prev, [item.id]: false }))
-                          setEditForm(f => ({ ...f, category_id: e.target.value, concept_id: '' }))
+                          const catId = e.target.value
+                          const matchingConcepts = concepts.filter(c => c.category_id === catId)
+                          let nextConceptId = ''
+                          if (matchingConcepts.length === 1) {
+                            nextConceptId = matchingConcepts[0].id
+                          }
+                          setEditForm(f => ({ ...f, category_id: catId, concept_id: nextConceptId }))
                           setShowEditNewConceptInput(prev => ({ ...prev, [item.id]: false }))
                         }
                       }}>

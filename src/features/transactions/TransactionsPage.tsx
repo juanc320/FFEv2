@@ -645,7 +645,25 @@ export default function TransactionsPage() {
                         setPrefilledFields(prev => ({ ...prev, category_id: false, concept_id: false, expense_item_id: false }))
                       } else {
                         setShowNewCategoryInput(false)
-                        setForm(f => ({ ...f, category_id: e.target.value, concept_id: '', expense_item_id: '' }))
+                        const catId = e.target.value
+                        const matchingConcepts = concepts.filter(c => c.category_id === catId)
+                        let nextConceptId = ''
+                        let nextExpenseItemId = ''
+
+                        if (matchingConcepts.length === 1) {
+                          nextConceptId = matchingConcepts[0].id
+                          const matchingItem = expenseItems.find(i => i.concept_id === nextConceptId)
+                          if (matchingItem) {
+                            nextExpenseItemId = matchingItem.id
+                          }
+                        }
+
+                        setForm(f => ({ 
+                          ...f, 
+                          category_id: catId, 
+                          concept_id: nextConceptId, 
+                          expense_item_id: nextExpenseItemId 
+                        }))
                         setPrefilledFields(prev => ({ ...prev, category_id: false, concept_id: false, expense_item_id: false }))
                         setShowNewConceptInput(false)
                       }
@@ -1010,7 +1028,27 @@ export default function TransactionsPage() {
                               <label className="text-xs text-slate-400 block mb-1">Categoría (opcional)</label>
                               <select className="input w-full px-3 py-1.5 text-sm bg-slate-800 border-slate-700 text-white" 
                                 value={editForm.category_id} 
-                                onChange={e => setEditForm({ ...editForm, category_id: e.target.value, concept_id: '', expense_item_id: '' })}
+                                onChange={e => {
+                                  const catId = e.target.value
+                                  const matchingConcepts = concepts.filter(c => c.category_id === catId)
+                                  let nextConceptId = ''
+                                  let nextExpenseItemId = ''
+
+                                  if (matchingConcepts.length === 1) {
+                                    nextConceptId = matchingConcepts[0].id
+                                    const matchingItem = expenseItems.find(i => i.concept_id === nextConceptId)
+                                    if (matchingItem) {
+                                      nextExpenseItemId = matchingItem.id
+                                    }
+                                  }
+
+                                  setEditForm({ 
+                                    ...editForm, 
+                                    category_id: catId, 
+                                    concept_id: nextConceptId, 
+                                    expense_item_id: nextExpenseItemId 
+                                  })
+                                }}
                               >
                                 <option value="">Todas las categorías</option>
                                 {categories.filter(c => c.type === 'expense').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
