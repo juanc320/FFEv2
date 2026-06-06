@@ -84,7 +84,7 @@ export async function syncPeriodicExpenses(familyId: string) {
         concept_id: p.concept_id,
         expense_type: 'sporadic',
         criticality: p.criticality,
-        due_mode: 'exact',
+        due_mode: 'once',
         due_date: dueDate,
         budget_amount: p.amount,
         arrears_amount: 0,
