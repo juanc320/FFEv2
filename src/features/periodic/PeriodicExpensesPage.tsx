@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
@@ -7,6 +7,7 @@ import { Plus, RefreshCw, Trash2, ChevronDown, Check } from 'lucide-react'
 import type { Category, Concept } from '@/shared/types/database'
 import { formatCOP } from '@/shared/utils/calculations'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
+import { syncPeriodicExpenses } from '@/shared/utils/periodicSync'
 import clsx from 'clsx'
 
 const PERIODICITY_LABELS = {
@@ -70,6 +71,21 @@ export default function PeriodicExpensesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<Record<string, any>>({})
 
+  // Estados para creación rápida de conceptos
+  const [showNewConceptInput, setShowNewConceptInput] = useState(false)
+  const [newConceptName, setNewConceptName] = useState('')
+  const [showEditNewConceptInput, setShowEditNewConceptInput] = useState<Record<string, boolean>>({})
+  const [editNewConceptName, setEditNewConceptName] = useState<Record<string, string>>({})
+
+  // Sincronización automática de gastos periódicos del mes activo al montar
+  useEffect(() => {
+    if (profile?.family_id) {
+      syncPeriodicExpenses(profile.family_id).then(() => {
+        qc.invalidateQueries({ queryKey: ['expense_items'] })
+      })
+    }
+  }, [profile?.family_id, qc])
+
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['periodic_expenses', profile?.family_id],
     queryFn: async () => {
@@ -95,11 +111,31 @@ export default function PeriodicExpensesPage() {
 
   const createItem = useMutation({
     mutationFn: async () => {
+      let finalConceptId = form.concept_id
+
+      // 1. Crear concepto rápido si es necesario
+      if (showNewConceptInput && newConceptName.trim()) {
+        const { data: newConcept, error: conErr } = await db
+          .from('concepts')
+          .insert({
+            family_id: profile!.family_id!,
+            category_id: form.category_id,
+            name: newConceptName.trim(),
+            active: true
+          })
+          .select()
+          .single()
+        
+        if (conErr) throw conErr
+        finalConceptId = newConcept.id
+      }
+
+      // 2. Insertar el gasto periódico
       await db.from('periodic_expenses').insert({
         family_id: profile!.family_id!,
         label: form.label.trim(),
         category_id: form.category_id || null,
-        concept_id: form.concept_id || null,
+        concept_id: finalConceptId || null,
         amount: form.amount,
         periodicity: form.periodicity,
         start_month: form.start_month,
@@ -108,23 +144,59 @@ export default function PeriodicExpensesPage() {
         due_day: form.due_day || null,
         active: true,
       })
+
+      // 3. Sincronizar inmediatamente con el mes presupuestal activo
+      await syncPeriodicExpenses(profile!.family_id!)
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['periodic_expenses'] }); setShowForm(false); setForm(EMPTY_FORM) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['periodic_expenses'] })
+      qc.invalidateQueries({ queryKey: ['concepts'] })
+      qc.invalidateQueries({ queryKey: ['expense_items'] })
+      setShowForm(false)
+      setForm(EMPTY_FORM)
+      setShowNewConceptInput(false)
+      setNewConceptName('')
+    },
   })
 
   const deleteItem = useMutation({
     mutationFn: async (id: string) => {
       await db.from('periodic_expenses').update({ active: false }).eq('id', id)
+      // Sincronizar inmediatamente
+      await syncPeriodicExpenses(profile!.family_id!)
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['periodic_expenses'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['periodic_expenses'] })
+      qc.invalidateQueries({ queryKey: ['expense_items'] })
+    },
   })
 
   const updateItem = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      let finalConceptId = data.concept_id
+
+      // 1. Crear concepto rápido si es necesario
+      if (showEditNewConceptInput[id] && editNewConceptName[id]?.trim()) {
+        const { data: newConcept, error: conErr } = await db
+          .from('concepts')
+          .insert({
+            family_id: profile!.family_id!,
+            category_id: data.category_id,
+            name: editNewConceptName[id].trim(),
+            active: true
+          })
+          .select()
+          .single()
+        
+        if (conErr) throw conErr
+        finalConceptId = newConcept.id
+      }
+
+      // 2. Actualizar el gasto periódico
       await db.from('periodic_expenses').update({
         label: data.label,
         category_id: data.category_id || null,
-        concept_id: data.concept_id || null,
+        concept_id: finalConceptId || null,
         amount: data.amount,
         periodicity: data.periodicity,
         start_month: data.start_month,
@@ -132,8 +204,18 @@ export default function PeriodicExpensesPage() {
         criticality: data.criticality,
         due_day: data.due_day || null,
       }).eq('id', id)
+
+      // 3. Sincronizar inmediatamente con el mes presupuestal activo
+      await syncPeriodicExpenses(profile!.family_id!)
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['periodic_expenses'] }); setExpandedId(null) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['periodic_expenses'] })
+      qc.invalidateQueries({ queryKey: ['concepts'] })
+      qc.invalidateQueries({ queryKey: ['expense_items'] })
+      setExpandedId(null)
+      setEditNewConceptName({})
+      setShowEditNewConceptInput({})
+    },
   })
 
   const totalAnnual = items.reduce((s: number, i: any) => {
@@ -168,19 +250,42 @@ export default function PeriodicExpensesPage() {
               <input className="input w-full" placeholder="Ej: Mantenimiento del carro" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
             </div>
             <div>
-              <label className="label">Categoría (opcional)</label>
+              <label className="label">Categoría</label>
               <select className="input w-full" value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value, concept_id: '' }))}>
-                <option value="">Sin categoría</option>
+                <option value="">Seleccionar categoría...</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="label">Concepto (opcional)</label>
-              <select className="input w-full" value={form.concept_id} onChange={e => setForm(f => ({ ...f, concept_id: e.target.value }))} disabled={!form.category_id}>
-                <option value="">Sin concepto</option>
+              <label className="label">Concepto</label>
+              <select className="input w-full" value={form.concept_id} onChange={e => {
+                if (e.target.value === 'CREATE_NEW') {
+                  setShowNewConceptInput(true)
+                  setForm(f => ({ ...f, concept_id: '' }))
+                } else {
+                  setShowNewConceptInput(false)
+                  setForm(f => ({ ...f, concept_id: e.target.value }))
+                }
+              }} disabled={!form.category_id}>
+                <option value="">Seleccionar concepto...</option>
                 {filteredConcepts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {form.category_id && <option value="CREATE_NEW">+ Crear nuevo concepto...</option>}
               </select>
             </div>
+
+            {/* Campo rápido para crear concepto */}
+            {showNewConceptInput && (
+              <div className="sm:col-span-2">
+                <label className="label text-indigo-400">Nombre del nuevo concepto</label>
+                <input
+                  className="input w-full border-indigo-500/50"
+                  placeholder="Ej: Otros (o Impuesto rodamiento)"
+                  value={newConceptName}
+                  onChange={e => setNewConceptName(e.target.value)}
+                />
+              </div>
+            )}
+
             <div>
               <label className="label">Monto estimado</label>
               <CurrencyInput className="input w-full" value={form.amount} onChange={val => setForm(f => ({ ...f, amount: val }))} />
@@ -230,7 +335,17 @@ export default function PeriodicExpensesPage() {
 
           <div className="flex gap-3 justify-end">
             <button className="btn-ghost" onClick={() => setShowForm(false)}>Cancelar</button>
-            <button className="btn-primary" disabled={!form.label.trim() || form.amount <= 0 || createItem.isPending} onClick={() => createItem.mutate()}>
+            <button
+              className="btn-primary"
+              disabled={
+                !form.label.trim() ||
+                !form.category_id ||
+                (!form.concept_id && (!showNewConceptInput || !newConceptName.trim())) ||
+                form.amount <= 0 ||
+                createItem.isPending
+              }
+              onClick={() => createItem.mutate()}
+            >
               {createItem.isPending ? 'Guardando...' : 'Agregar gasto periódico'}
             </button>
           </div>
@@ -241,7 +356,7 @@ export default function PeriodicExpensesPage() {
       <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3 flex gap-3">
         <RefreshCw size={16} className="text-indigo-400 flex-shrink-0 mt-0.5" />
         <p className="text-indigo-300 text-sm">
-          <span className="font-medium">Inyección automática:</span> Cuando crees un nuevo mes, el sistema detectará automáticamente qué gastos periódicos corresponden a ese mes y los agregará a tu Plan de gastos como tipo <span className="font-medium">Esporádico</span>.
+          <span className="font-medium">Inyección automática:</span> Cuando crees un nuevo mes o edites tus periódicos, el sistema detectará automáticamente qué gastos corresponden a ese mes y los agregará/sincronizará en tu Plan de gastos como tipo <span className="font-medium">Esporádico</span>.
         </p>
       </div>
 
@@ -313,17 +428,40 @@ export default function PeriodicExpensesPage() {
                     <div>
                       <label className="label">Categoría</label>
                       <select className="input w-full" value={editForm.category_id || ''} onChange={e => setEditForm(f => ({ ...f, category_id: e.target.value, concept_id: '' }))}>
-                        <option value="">Sin categoría</option>
+                        <option value="">Seleccionar categoría...</option>
                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="label">Concepto</label>
-                      <select className="input w-full" value={editForm.concept_id || ''} onChange={e => setEditForm(f => ({ ...f, concept_id: e.target.value }))} disabled={!editForm.category_id}>
-                        <option value="">Sin concepto</option>
+                      <select className="input w-full" value={showEditNewConceptInput[item.id] ? 'CREATE_NEW' : (editForm.concept_id || '')} onChange={e => {
+                        if (e.target.value === 'CREATE_NEW') {
+                          setShowEditNewConceptInput(prev => ({ ...prev, [item.id]: true }))
+                          setEditForm(f => ({ ...f, concept_id: '' }))
+                        } else {
+                          setShowEditNewConceptInput(prev => ({ ...prev, [item.id]: false }))
+                          setEditForm(f => ({ ...f, concept_id: e.target.value }))
+                        }
+                      }} disabled={!editForm.category_id}>
+                        <option value="">Seleccionar concepto...</option>
                         {concepts.filter(c => c.category_id === editForm.category_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {editForm.category_id && <option value="CREATE_NEW">+ Crear nuevo concepto...</option>}
                       </select>
                     </div>
+
+                    {/* Campo rápido para crear concepto en edición */}
+                    {showEditNewConceptInput[item.id] && (
+                      <div className="sm:col-span-2">
+                        <label className="label text-indigo-400">Nombre del nuevo concepto</label>
+                        <input
+                          className="input w-full border-indigo-500/50"
+                          placeholder="Ej: Otros (o Impuesto rodamiento)"
+                          value={editNewConceptName[item.id] || ''}
+                          onChange={e => setEditNewConceptName(prev => ({ ...prev, [item.id]: e.target.value }))}
+                        />
+                      </div>
+                    )}
+
                     <div>
                       <label className="label">Monto</label>
                       <CurrencyInput className="input w-full" value={editForm.amount || 0} onChange={val => setEditForm(f => ({ ...f, amount: val }))} />
@@ -369,7 +507,13 @@ export default function PeriodicExpensesPage() {
                       <button className="btn-ghost text-sm py-1.5 px-3" onClick={() => setExpandedId(null)}>Cancelar</button>
                       <button
                         className="btn-primary text-sm py-1.5 px-3 flex items-center gap-1"
-                        disabled={updateItem.isPending}
+                        disabled={
+                          !editForm.label?.trim() ||
+                          !editForm.category_id ||
+                          (!editForm.concept_id && (!showEditNewConceptInput[item.id] || !(editNewConceptName[item.id]?.trim()))) ||
+                          (editForm.amount || 0) <= 0 ||
+                          updateItem.isPending
+                        }
                         onClick={() => updateItem.mutate({ id: item.id, data: editForm })}
                       >
                         <Check size={13} /> {updateItem.isPending ? 'Guardando...' : 'Guardar'}

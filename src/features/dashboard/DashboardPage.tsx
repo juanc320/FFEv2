@@ -1,8 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { db } from '@/lib/db'
 import { useAuth } from '@/features/auth/AuthContext'
 import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, Wallet, Receipt, ArrowRightLeft, Shield, PiggyBank } from 'lucide-react'
 import { formatCOP, monthName } from '@/shared/utils/calculations'
+import { syncPeriodicExpenses } from '@/shared/utils/periodicSync'
 import clsx from 'clsx'
 import type { Account, BudgetMonth, MonthlyExpenseItem, MonthlyIncomeItem, Transaction } from '@/shared/types/database'
 
@@ -172,7 +174,18 @@ function useDashboardData() {
 }
 
 export default function DashboardPage() {
+  const { profile } = useAuth()
+  const qc = useQueryClient()
   const { data, isLoading } = useDashboardData()
+
+  // Correr la sincronización de gastos periódicos al montar el dashboard
+  useEffect(() => {
+    if (profile?.family_id) {
+      syncPeriodicExpenses(profile.family_id).then(() => {
+        qc.invalidateQueries({ queryKey: ['dashboard'] })
+      })
+    }
+  }, [profile?.family_id, qc])
 
   if (isLoading) {
     return (

@@ -8,6 +8,7 @@ import { useActiveMonth } from '@/features/months/MonthsPage'
 import type { MonthlyExpenseItem, Category, Concept } from '@/shared/types/database'
 import { formatCOP, calcEnvelopeAvailable } from '@/shared/utils/calculations'
 import { Plus, AlertTriangle, CheckCircle, Clock, ChevronDown, Edit2, Trash2, Tag, Calendar, Shield, PiggyBank } from 'lucide-react'
+import { syncPeriodicExpenses } from '@/shared/utils/periodicSync'
 import clsx from 'clsx'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
@@ -94,6 +95,10 @@ export default function ExpensesPage() {
     return (localStorage.getItem('ffev2_expenses_tab') as 'obligations' | 'envelopes') || 'obligations'
   })
 
+  // Estados para creación rápida de concepto
+  const [showNewConceptInput, setShowNewConceptInput] = useState(false)
+  const [newConceptName, setNewConceptName] = useState('')
+
   useEffect(() => {
     setShowZeroItems(false)
   }, [activeTab])
@@ -107,6 +112,15 @@ export default function ExpensesPage() {
     criticality: 'critical' | 'necessary' | 'desirable' | 'optional';
     due_date: string;
   } | null>(null)
+
+  // Correr la sincronización de gastos periódicos al cargar/montar el plan de gastos
+  useEffect(() => {
+    if (profile?.family_id) {
+      syncPeriodicExpenses(profile.family_id).then(() => {
+        qc.invalidateQueries({ queryKey: ['expense_items'] })
+      })
+    }
+  }, [profile?.family_id, qc])
 
   useEffect(() => {
     localStorage.setItem('ffev2_expenses_tab', activeTab)
@@ -128,11 +142,31 @@ export default function ExpensesPage() {
 
   const createItem = useMutation({
     mutationFn: async () => {
+      let finalConceptId = form.concept_id
+
+      // 1. Crear concepto rápido si es necesario
+      if (showNewConceptInput && newConceptName.trim()) {
+        const { data: newConcept, error: conErr } = await db
+          .from('concepts')
+          .insert({
+            family_id: profile!.family_id!,
+            category_id: form.category_id,
+            name: newConceptName.trim(),
+            active: true
+          })
+          .select()
+          .single()
+        
+        if (conErr) throw conErr
+        finalConceptId = newConcept.id
+      }
+
+      // 2. Insertar el gasto
       await db.from('monthly_expense_items').insert({
         month_id: activeMonth!.id,
         family_id: profile!.family_id!,
         category_id: form.category_id,
-        concept_id: form.concept_id,
+        concept_id: finalConceptId,
         expense_type: form.expense_type,
         criticality: form.criticality,
         due_mode: form.due_mode,
@@ -144,7 +178,14 @@ export default function ExpensesPage() {
         active_in_month: true,
       })
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expense_items'] }); setShowForm(false); setForm(EMPTY) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expense_items'] })
+      qc.invalidateQueries({ queryKey: ['concepts'] })
+      setShowForm(false)
+      setForm(EMPTY)
+      setShowNewConceptInput(false)
+      setNewConceptName('')
+    },
   })
 
   const deleteItem = useMutation({
@@ -406,11 +447,34 @@ export default function ExpensesPage() {
             </div>
             <div>
               <label className="label">Concepto</label>
-              <select className="input w-full" value={form.concept_id} onChange={e => setForm(f => ({ ...f, concept_id: e.target.value }))} disabled={!form.category_id}>
+              <select className="input w-full" value={form.concept_id} onChange={e => {
+                if (e.target.value === 'CREATE_NEW') {
+                  setShowNewConceptInput(true)
+                  setForm(f => ({ ...f, concept_id: '' }))
+                } else {
+                  setShowNewConceptInput(false)
+                  setForm(f => ({ ...f, concept_id: e.target.value }))
+                }
+              }} disabled={!form.category_id}>
                 <option value="">Seleccionar...</option>
                 {filteredConcepts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {form.category_id && <option value="CREATE_NEW">+ Crear nuevo concepto...</option>}
               </select>
             </div>
+
+            {/* Campo rápido para crear concepto */}
+            {showNewConceptInput && (
+              <div className="sm:col-span-2">
+                <label className="label text-indigo-400">Nombre del nuevo concepto</label>
+                <input
+                  className="input w-full border-indigo-500/50"
+                  placeholder="Ej: Otros (o Impuesto rodamiento)"
+                  value={newConceptName}
+                  onChange={e => setNewConceptName(e.target.value)}
+                />
+              </div>
+            )}
+
             <div>
               <label className="label">Criticidad</label>
               <select className="input w-full" value={form.criticality} onChange={e => setForm(f => ({ ...f, criticality: e.target.value as typeof form.criticality }))}>
@@ -435,7 +499,15 @@ export default function ExpensesPage() {
           </div>
           <div className="flex gap-3 justify-end mt-2">
             <button className="btn-ghost" onClick={() => setShowForm(false)}>Cancelar</button>
-            <button className="btn-primary" disabled={!form.category_id || !form.concept_id || createItem.isPending} onClick={() => createItem.mutate()}>
+            <button
+              className="btn-primary"
+              disabled={
+                !form.category_id ||
+                (!form.concept_id && (!showNewConceptInput || !newConceptName.trim())) ||
+                createItem.isPending
+              }
+              onClick={() => createItem.mutate()}
+            >
               {createItem.isPending ? 'Guardando...' : activeTab === 'obligations' ? 'Agregar obligación' : 'Crear sobre'}
             </button>
           </div>
@@ -674,10 +746,10 @@ export default function ExpensesPage() {
                                 </button>
                               )}
                               <button className="text-xs flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors" onClick={() => {
-                                if (window.confirm('¿Seguro que deseas eliminar esta obligación del plan del mes?')) {
-                                  deleteItem.mutate(item.id)
-                                }
-                              }}>
+                                  if (window.confirm('¿Seguro que deseas eliminar esta obligación del plan del mes?')) {
+                                    deleteItem.mutate(item.id)
+                                  }
+                                }}>
                                 <Trash2 size={14} /> Eliminar
                               </button>
                             </div>
@@ -894,7 +966,7 @@ export default function ExpensesPage() {
                 return (
                   <div key={item.id} className="card p-0 overflow-hidden bg-slate-900/10 border-slate-850/50 opacity-60 hover:opacity-100 transition-opacity">
                     <div 
-                      className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-slate-850/20"
+                      className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-slate-855/20"
                       onClick={() => setExpandedId(isExpanded ? null : item.id)}
                     >
                       <div className="flex items-center gap-2.5">
