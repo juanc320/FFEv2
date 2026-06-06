@@ -113,6 +113,7 @@ export default function TransactionsPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [envelopeAlert, setEnvelopeAlert] = useState<{ shortfall: number; itemId: string } | null>(null)
   const [filterType, setFilterType] = useState<string>('all')
+  const [accountFilter, setAccountFilter] = useState<string>('all')
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>(null)
   const [prefilledFields, setPrefilledFields] = useState<Record<string, boolean>>({})
@@ -452,11 +453,23 @@ export default function TransactionsPage() {
     }
   })
 
-  const filtered = filterType === 'all' 
-    ? transactions 
-    : filterType === 'unbudgeted'
-      ? transactions.filter(t => t.type === 'expense' && !t.expense_item_id)
-      : transactions.filter(t => t.type === filterType)
+  const filtered = transactions.filter(t => {
+    // Apply transaction type filter
+    if (filterType !== 'all') {
+      if (filterType === 'unbudgeted') {
+        if (!(t.type === 'expense' && !t.expense_item_id)) return false
+      } else {
+        if (t.type !== filterType) return false
+      }
+    }
+    // Apply bank account filter
+    if (accountFilter !== 'all') {
+      if (t.source_account_id !== accountFilter && t.destination_account_id !== accountFilter) {
+        return false
+      }
+    }
+    return true
+  })
 
   const filteredTotal = filtered.reduce((sum, t) => sum + Number(t.amount), 0)
 
@@ -710,13 +723,27 @@ export default function TransactionsPage() {
       )}
 
       {/* Filter */}
-      <div className="flex gap-2 flex-wrap">
-        {['all', 'expense', 'unbudgeted', 'income', 'transfer_internal', 'tax_4x1000'].map(t => (
-          <button key={t} onClick={() => setFilterType(t)}
-            className={clsx('text-xs px-3 py-1.5 rounded-full border transition-all', filterType === t ? 'bg-indigo-600 border-indigo-500 text-white' : 'border-slate-700 text-slate-400 hover:text-white')}>
-            {t === 'all' ? 'Todos' : t === 'tax_4x1000' ? '4×1000' : t === 'unbudgeted' ? 'No presupuestados (Otros)' : MODE_LABELS[t as TxMode] ?? t}
-          </button>
-        ))}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex gap-2 flex-wrap">
+          {['all', 'expense', 'unbudgeted', 'income', 'transfer_internal', 'tax_4x1000'].map(t => (
+            <button key={t} onClick={() => setFilterType(t)}
+              className={clsx('text-xs px-3 py-1.5 rounded-full border transition-all', filterType === t ? 'bg-indigo-600 border-indigo-500 text-white' : 'border-slate-700 text-slate-400 hover:text-white')}>
+              {t === 'all' ? 'Todos' : t === 'tax_4x1000' ? '4×1000' : t === 'unbudgeted' ? 'No presupuestados (Otros)' : MODE_LABELS[t as TxMode] ?? t}
+            </button>
+          ))}
+        </div>
+        <div>
+          <select 
+            className="input py-1.5 px-3 text-xs w-full sm:w-48 bg-slate-800 border-slate-700 text-white rounded-full focus:ring-indigo-500 focus:border-indigo-500"
+            value={accountFilter}
+            onChange={e => setAccountFilter(e.target.value)}
+          >
+            <option value="all">Todas las cuentas</option>
+            {accounts.map(acc => (
+              <option key={acc.id} value={acc.id}>{acc.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* List */}
