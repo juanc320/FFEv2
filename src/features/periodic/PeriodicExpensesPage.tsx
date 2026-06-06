@@ -71,6 +71,12 @@ export default function PeriodicExpensesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<Record<string, any>>({})
 
+  // Estados para creación rápida de categorías
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [showEditNewCategoryInput, setShowEditNewCategoryInput] = useState<Record<string, boolean>>({})
+  const [editNewCategoryName, setEditNewCategoryName] = useState<Record<string, string>>({})
+
   // Estados para creación rápida de conceptos
   const [showNewConceptInput, setShowNewConceptInput] = useState(false)
   const [newConceptName, setNewConceptName] = useState('')
@@ -97,13 +103,13 @@ export default function PeriodicExpensesPage() {
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories', profile?.family_id],
-    queryFn: async () => { const { data } = await supabase.from('categories').select('*').eq('family_id', profile!.family_id!).order('name'); return (data ?? []) as Category[] },
+    queryFn: async () => { const { data } = await supabase.from('categories').select('*').eq('family_id', profile!.family_id!).eq('type', 'expense').eq('active', true).order('name'); return (data ?? []) as Category[] },
     enabled: !!profile?.family_id,
   })
 
   const { data: concepts = [] } = useQuery({
     queryKey: ['concepts', profile?.family_id],
-    queryFn: async () => { const { data } = await supabase.from('concepts').select('*').eq('family_id', profile!.family_id!).order('name'); return (data ?? []) as Concept[] },
+    queryFn: async () => { const { data } = await supabase.from('concepts').select('*').eq('family_id', profile!.family_id!).eq('active', true).order('name'); return (data ?? []) as Concept[] },
     enabled: !!profile?.family_id,
   })
 
@@ -111,15 +117,33 @@ export default function PeriodicExpensesPage() {
 
   const createItem = useMutation({
     mutationFn: async () => {
+      let finalCategoryId = form.category_id
       let finalConceptId = form.concept_id
 
-      // 1. Crear concepto rápido si es necesario
+      // 1. Crear categoría rápida si es necesario
+      if (showNewCategoryInput && newCategoryName.trim()) {
+        const { data: newCat, error: catErr } = await db
+          .from('categories')
+          .insert({
+            family_id: profile!.family_id!,
+            name: newCategoryName.trim(),
+            type: 'expense',
+            active: true
+          })
+          .select()
+          .single()
+        
+        if (catErr) throw catErr
+        finalCategoryId = newCat.id
+      }
+
+      // 2. Crear concepto rápido si es necesario
       if (showNewConceptInput && newConceptName.trim()) {
         const { data: newConcept, error: conErr } = await db
           .from('concepts')
           .insert({
             family_id: profile!.family_id!,
-            category_id: form.category_id,
+            category_id: finalCategoryId,
             name: newConceptName.trim(),
             active: true
           })
@@ -130,11 +154,11 @@ export default function PeriodicExpensesPage() {
         finalConceptId = newConcept.id
       }
 
-      // 2. Insertar el gasto periódico
+      // 3. Insertar el gasto periódico
       await db.from('periodic_expenses').insert({
         family_id: profile!.family_id!,
         label: form.label.trim(),
-        category_id: form.category_id || null,
+        category_id: finalCategoryId || null,
         concept_id: finalConceptId || null,
         amount: form.amount,
         periodicity: form.periodicity,
@@ -145,15 +169,18 @@ export default function PeriodicExpensesPage() {
         active: true,
       })
 
-      // 3. Sincronizar inmediatamente con el mes presupuestal activo
+      // 4. Sincronizar inmediatamente con el mes presupuestal activo
       await syncPeriodicExpenses(profile!.family_id!)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['periodic_expenses'] })
+      qc.invalidateQueries({ queryKey: ['categories'] })
       qc.invalidateQueries({ queryKey: ['concepts'] })
       qc.invalidateQueries({ queryKey: ['expense_items'] })
       setShowForm(false)
       setForm(EMPTY_FORM)
+      setShowNewCategoryInput(false)
+      setNewCategoryName('')
       setShowNewConceptInput(false)
       setNewConceptName('')
     },
@@ -173,15 +200,33 @@ export default function PeriodicExpensesPage() {
 
   const updateItem = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      let finalCategoryId = data.category_id
       let finalConceptId = data.concept_id
 
-      // 1. Crear concepto rápido si es necesario
+      // 1. Crear categoría rápida si es necesario
+      if (showEditNewCategoryInput[id] && editNewCategoryName[id]?.trim()) {
+        const { data: newCat, error: catErr } = await db
+          .from('categories')
+          .insert({
+            family_id: profile!.family_id!,
+            name: editNewCategoryName[id].trim(),
+            type: 'expense',
+            active: true
+          })
+          .select()
+          .single()
+        
+        if (catErr) throw catErr
+        finalCategoryId = newCat.id
+      }
+
+      // 2. Crear concepto rápido si es necesario
       if (showEditNewConceptInput[id] && editNewConceptName[id]?.trim()) {
         const { data: newConcept, error: conErr } = await db
           .from('concepts')
           .insert({
             family_id: profile!.family_id!,
-            category_id: data.category_id,
+            category_id: finalCategoryId,
             name: editNewConceptName[id].trim(),
             active: true
           })
@@ -192,10 +237,10 @@ export default function PeriodicExpensesPage() {
         finalConceptId = newConcept.id
       }
 
-      // 2. Actualizar el gasto periódico
+      // 3. Actualizar el gasto periódico
       await db.from('periodic_expenses').update({
         label: data.label,
-        category_id: data.category_id || null,
+        category_id: finalCategoryId || null,
         concept_id: finalConceptId || null,
         amount: data.amount,
         periodicity: data.periodicity,
@@ -205,14 +250,17 @@ export default function PeriodicExpensesPage() {
         due_day: data.due_day || null,
       }).eq('id', id)
 
-      // 3. Sincronizar inmediatamente con el mes presupuestal activo
+      // 4. Sincronizar inmediatamente con el mes presupuestal activo
       await syncPeriodicExpenses(profile!.family_id!)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['periodic_expenses'] })
+      qc.invalidateQueries({ queryKey: ['categories'] })
       qc.invalidateQueries({ queryKey: ['concepts'] })
       qc.invalidateQueries({ queryKey: ['expense_items'] })
       setExpandedId(null)
+      setEditNewCategoryName({})
+      setShowEditNewCategoryInput({})
       setEditNewConceptName({})
       setShowEditNewConceptInput({})
     },
@@ -251,9 +299,20 @@ export default function PeriodicExpensesPage() {
             </div>
             <div>
               <label className="label">Categoría</label>
-              <select className="input w-full" value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value, concept_id: '' }))}>
+              <select className="input w-full" value={showNewCategoryInput ? 'CREATE_NEW' : form.category_id} onChange={e => {
+                if (e.target.value === 'CREATE_NEW') {
+                  setShowNewCategoryInput(true)
+                  setShowNewConceptInput(true) // Forzar concepto nuevo para nueva categoría
+                  setForm(f => ({ ...f, category_id: '', concept_id: '' }))
+                } else {
+                  setShowNewCategoryInput(false)
+                  setForm(f => ({ ...f, category_id: e.target.value, concept_id: '' }))
+                  setShowNewConceptInput(false)
+                }
+              }}>
                 <option value="">Seleccionar categoría...</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <option value="CREATE_NEW">+ Crear nueva categoría...</option>
               </select>
             </div>
             <div>
@@ -266,12 +325,25 @@ export default function PeriodicExpensesPage() {
                   setShowNewConceptInput(false)
                   setForm(f => ({ ...f, concept_id: e.target.value }))
                 }
-              }} disabled={!form.category_id}>
+              }} disabled={!form.category_id && !showNewCategoryInput}>
                 <option value="">Seleccionar concepto...</option>
                 {filteredConcepts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                {form.category_id && <option value="CREATE_NEW">+ Crear nuevo concepto...</option>}
+                {(form.category_id || showNewCategoryInput) && <option value="CREATE_NEW">+ Crear nuevo concepto...</option>}
               </select>
             </div>
+
+            {/* Campo rápido para crear categoría */}
+            {showNewCategoryInput && (
+              <div className="sm:col-span-2">
+                <label className="label text-indigo-400">Nombre de la nueva categoría</label>
+                <input
+                  className="input w-full border-indigo-500/50"
+                  placeholder="Ej: Salud Familiar"
+                  value={newCategoryName}
+                  onChange={e => setNewCategoryName(e.target.value)}
+                />
+              </div>
+            )}
 
             {/* Campo rápido para crear concepto */}
             {showNewConceptInput && (
@@ -339,7 +411,7 @@ export default function PeriodicExpensesPage() {
               className="btn-primary"
               disabled={
                 !form.label.trim() ||
-                !form.category_id ||
+                (!form.category_id && (!showNewCategoryInput || !newCategoryName.trim())) ||
                 (!form.concept_id && (!showNewConceptInput || !newConceptName.trim())) ||
                 form.amount <= 0 ||
                 createItem.isPending
@@ -427,9 +499,20 @@ export default function PeriodicExpensesPage() {
                     </div>
                     <div>
                       <label className="label">Categoría</label>
-                      <select className="input w-full" value={editForm.category_id || ''} onChange={e => setEditForm(f => ({ ...f, category_id: e.target.value, concept_id: '' }))}>
+                      <select className="input w-full" value={showEditNewCategoryInput[item.id] ? 'CREATE_NEW' : (editForm.category_id || '')} onChange={e => {
+                        if (e.target.value === 'CREATE_NEW') {
+                          setShowEditNewCategoryInput(prev => ({ ...prev, [item.id]: true }))
+                          setShowEditNewConceptInput(prev => ({ ...prev, [item.id]: true }))
+                          setEditForm(f => ({ ...f, category_id: '', concept_id: '' }))
+                        } else {
+                          setShowEditNewCategoryInput(prev => ({ ...prev, [item.id]: false }))
+                          setEditForm(f => ({ ...f, category_id: e.target.value, concept_id: '' }))
+                          setShowEditNewConceptInput(prev => ({ ...prev, [item.id]: false }))
+                        }
+                      }}>
                         <option value="">Seleccionar categoría...</option>
                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        <option value="CREATE_NEW">+ Crear nueva categoría...</option>
                       </select>
                     </div>
                     <div>
@@ -442,12 +525,25 @@ export default function PeriodicExpensesPage() {
                           setShowEditNewConceptInput(prev => ({ ...prev, [item.id]: false }))
                           setEditForm(f => ({ ...f, concept_id: e.target.value }))
                         }
-                      }} disabled={!editForm.category_id}>
+                      }} disabled={!editForm.category_id && !showEditNewCategoryInput[item.id]}>
                         <option value="">Seleccionar concepto...</option>
                         {concepts.filter(c => c.category_id === editForm.category_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        {editForm.category_id && <option value="CREATE_NEW">+ Crear nuevo concepto...</option>}
+                        {(editForm.category_id || showEditNewCategoryInput[item.id]) && <option value="CREATE_NEW">+ Crear nuevo concepto...</option>}
                       </select>
                     </div>
+
+                    {/* Campo rápido para crear categoría en edición */}
+                    {showEditNewCategoryInput[item.id] && (
+                      <div className="sm:col-span-2">
+                        <label className="label text-indigo-400">Nombre de la nueva categoría</label>
+                        <input
+                          className="input w-full border-indigo-500/50"
+                          placeholder="Ej: Salud Familiar"
+                          value={editNewCategoryName[item.id] || ''}
+                          onChange={e => setEditNewCategoryName(prev => ({ ...prev, [item.id]: e.target.value }))}
+                        />
+                      </div>
+                    )}
 
                     {/* Campo rápido para crear concepto en edición */}
                     {showEditNewConceptInput[item.id] && (
@@ -509,7 +605,7 @@ export default function PeriodicExpensesPage() {
                         className="btn-primary text-sm py-1.5 px-3 flex items-center gap-1"
                         disabled={
                           !editForm.label?.trim() ||
-                          !editForm.category_id ||
+                          (!editForm.category_id && (!showEditNewCategoryInput[item.id] || !(editNewCategoryName[item.id]?.trim()))) ||
                           (!editForm.concept_id && (!showEditNewConceptInput[item.id] || !(editNewConceptName[item.id]?.trim()))) ||
                           (editForm.amount || 0) <= 0 ||
                           updateItem.isPending

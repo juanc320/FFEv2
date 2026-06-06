@@ -95,7 +95,9 @@ export default function ExpensesPage() {
     return (localStorage.getItem('ffev2_expenses_tab') as 'obligations' | 'envelopes') || 'obligations'
   })
 
-  // Estados para creación rápida de concepto
+  // Estados para creación rápida de categorías y conceptos
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
   const [showNewConceptInput, setShowNewConceptInput] = useState(false)
   const [newConceptName, setNewConceptName] = useState('')
 
@@ -129,12 +131,12 @@ export default function ExpensesPage() {
   // Categories + Concepts
   const { data: categories = [] } = useQuery({
     queryKey: ['categories', profile?.family_id],
-    queryFn: async () => { const { data } = await supabase.from('categories').select('*').eq('family_id', profile!.family_id!).eq('type', 'expense').eq('active', true); return (data ?? []) as Category[] },
+    queryFn: async () => { const { data } = await supabase.from('categories').select('*').eq('family_id', profile!.family_id!).eq('type', 'expense').eq('active', true).order('name'); return (data ?? []) as Category[] },
     enabled: !!profile?.family_id,
   })
   const { data: concepts = [] } = useQuery({
     queryKey: ['concepts', profile?.family_id],
-    queryFn: async () => { const { data } = await supabase.from('concepts').select('*').eq('family_id', profile!.family_id!).eq('active', true); return (data ?? []) as Concept[] },
+    queryFn: async () => { const { data } = await supabase.from('concepts').select('*').eq('family_id', profile!.family_id!).eq('active', true).order('name'); return (data ?? []) as Concept[] },
     enabled: !!profile?.family_id,
   })
 
@@ -142,15 +144,33 @@ export default function ExpensesPage() {
 
   const createItem = useMutation({
     mutationFn: async () => {
+      let finalCategoryId = form.category_id
       let finalConceptId = form.concept_id
 
-      // 1. Crear concepto rápido si es necesario
+      // 1. Crear categoría rápida si es necesario
+      if (showNewCategoryInput && newCategoryName.trim()) {
+        const { data: newCat, error: catErr } = await db
+          .from('categories')
+          .insert({
+            family_id: profile!.family_id!,
+            name: newCategoryName.trim(),
+            type: 'expense',
+            active: true
+          })
+          .select()
+          .single()
+        
+        if (catErr) throw catErr
+        finalCategoryId = newCat.id
+      }
+
+      // 2. Crear concepto rápido si es necesario
       if (showNewConceptInput && newConceptName.trim()) {
         const { data: newConcept, error: conErr } = await db
           .from('concepts')
           .insert({
             family_id: profile!.family_id!,
-            category_id: form.category_id,
+            category_id: finalCategoryId,
             name: newConceptName.trim(),
             active: true
           })
@@ -161,11 +181,11 @@ export default function ExpensesPage() {
         finalConceptId = newConcept.id
       }
 
-      // 2. Insertar el gasto
+      // 3. Insertar el gasto
       await db.from('monthly_expense_items').insert({
         month_id: activeMonth!.id,
         family_id: profile!.family_id!,
-        category_id: form.category_id,
+        category_id: finalCategoryId,
         concept_id: finalConceptId,
         expense_type: form.expense_type,
         criticality: form.criticality,
@@ -180,9 +200,12 @@ export default function ExpensesPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expense_items'] })
+      qc.invalidateQueries({ queryKey: ['categories'] })
       qc.invalidateQueries({ queryKey: ['concepts'] })
       setShowForm(false)
       setForm(EMPTY)
+      setShowNewCategoryInput(false)
+      setNewCategoryName('')
       setShowNewConceptInput(false)
       setNewConceptName('')
     },
@@ -440,9 +463,20 @@ export default function ExpensesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Categoría</label>
-              <select className="input w-full" value={form.category_id} onChange={e => setForm(f => ({ ...f, category_id: e.target.value, concept_id: '' }))}>
+              <select className="input w-full" value={showNewCategoryInput ? 'CREATE_NEW' : form.category_id} onChange={e => {
+                if (e.target.value === 'CREATE_NEW') {
+                  setShowNewCategoryInput(true)
+                  setShowNewConceptInput(true) // Forzar concepto nuevo para nueva categoría
+                  setForm(f => ({ ...f, category_id: '', concept_id: '' }))
+                } else {
+                  setShowNewCategoryInput(false)
+                  setForm(f => ({ ...f, category_id: e.target.value, concept_id: '' }))
+                  setShowNewConceptInput(false)
+                }
+              }}>
                 <option value="">Seleccionar...</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                <option value="CREATE_NEW">+ Crear nueva categoría...</option>
               </select>
             </div>
             <div>
@@ -455,12 +489,25 @@ export default function ExpensesPage() {
                   setShowNewConceptInput(false)
                   setForm(f => ({ ...f, concept_id: e.target.value }))
                 }
-              }} disabled={!form.category_id}>
+              }} disabled={!form.category_id && !showNewCategoryInput}>
                 <option value="">Seleccionar...</option>
                 {filteredConcepts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                {form.category_id && <option value="CREATE_NEW">+ Crear nuevo concepto...</option>}
+                {(form.category_id || showNewCategoryInput) && <option value="CREATE_NEW">+ Crear nuevo concepto...</option>}
               </select>
             </div>
+
+            {/* Campo rápido para crear categoría */}
+            {showNewCategoryInput && (
+              <div className="sm:col-span-2">
+                <label className="label text-indigo-400">Nombre de la nueva categoría</label>
+                <input
+                  className="input w-full border-indigo-500/50"
+                  placeholder="Ej: Salud Familiar"
+                  value={newCategoryName}
+                  onChange={e => setNewCategoryName(e.target.value)}
+                />
+              </div>
+            )}
 
             {/* Campo rápido para crear concepto */}
             {showNewConceptInput && (
@@ -502,7 +549,7 @@ export default function ExpensesPage() {
             <button
               className="btn-primary"
               disabled={
-                !form.category_id ||
+                (!form.category_id && (!showNewCategoryInput || !newCategoryName.trim())) ||
                 (!form.concept_id && (!showNewConceptInput || !newConceptName.trim())) ||
                 createItem.isPending
               }
