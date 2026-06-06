@@ -117,6 +117,10 @@ export default function TransactionsPage() {
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>(null)
   const [prefilledFields, setPrefilledFields] = useState<Record<string, boolean>>({})
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [showNewConceptInput, setShowNewConceptInput] = useState(false)
+  const [newConceptName, setNewConceptName] = useState('')
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -201,6 +205,69 @@ export default function TransactionsPage() {
       // Note: We now allow transactions to go over the budget (pockets can go in red).
       // We only show a warning in the UI instead of throwing and blocking registration.
 
+      let finalCategoryId = form.category_id
+      let finalConceptId = form.concept_id
+      let finalExpenseItemId = form.expense_item_id
+
+      if (form.mode === 'expense') {
+        // 1. Crear categoría rápida si es necesario
+        if (showNewCategoryInput && newCategoryName.trim()) {
+          const { data: newCat, error: catErr } = await db
+            .from('categories')
+            .insert({
+              family_id: familyId,
+              name: newCategoryName.trim(),
+              type: 'expense',
+              active: true
+            })
+            .select()
+            .single()
+          if (catErr) throw catErr
+          finalCategoryId = newCat.id
+        }
+
+        // 2. Crear concepto rápido si es necesario
+        if (showNewConceptInput && newConceptName.trim()) {
+          const { data: newConcept, error: conErr } = await db
+            .from('concepts')
+            .insert({
+              family_id: familyId,
+              category_id: finalCategoryId,
+              name: newConceptName.trim(),
+              active: true
+            })
+            .select()
+            .single()
+          if (conErr) throw conErr
+          finalConceptId = newConcept.id
+        }
+
+        // 3. Crear bolsillo mensual de $0 si es categoría o concepto nuevo
+        if (showNewCategoryInput || showNewConceptInput) {
+          const { data: newItem, error: itemErr } = await db
+            .from('monthly_expense_items')
+            .insert({
+              month_id: activeMonth.id,
+              family_id: familyId,
+              category_id: finalCategoryId,
+              concept_id: finalConceptId,
+              expense_type: 'variable',
+              criticality: 'necessary',
+              due_mode: 'once',
+              budget_amount: 0,
+              arrears_amount: 0,
+              deferred_amount: 0,
+              executed_amount_cached: form.amount, // Registrar monto consumido
+              status: 'pending',
+              active_in_month: true,
+            })
+            .select()
+            .single()
+          if (itemErr) throw itemErr
+          finalExpenseItemId = newItem.id
+        }
+      }
+
       // Main transaction
       const { data: tx, error } = await db.from('transactions').insert({
         family_id: familyId,
@@ -211,9 +278,9 @@ export default function TransactionsPage() {
         source_account_id: form.source_account_id || null,
         destination_account_id: form.destination_account_id || null,
         external_party_label: form.external_party_label || null,
-        category_id: form.category_id || null,
-        concept_id: form.concept_id || null,
-        expense_item_id: form.expense_item_id || null,
+        category_id: finalCategoryId || null,
+        concept_id: finalConceptId || null,
+        expense_item_id: finalExpenseItemId || null,
         income_item_id: form.mode === 'income' ? (form.income_item_id || null) : null,
         date: form.date,
         note: form.note || null,
@@ -280,10 +347,16 @@ export default function TransactionsPage() {
       qc.invalidateQueries({ queryKey: ['accounts'] })
       qc.invalidateQueries({ queryKey: ['expense_items'] })
       qc.invalidateQueries({ queryKey: ['income_items'] })
+      qc.invalidateQueries({ queryKey: ['categories'] })
+      qc.invalidateQueries({ queryKey: ['concepts'] })
       setShowForm(false)
       setForm(EMPTY_FORM)
       setEnvelopeAlert(null)
       setPrefilledFields({})
+      setShowNewCategoryInput(false)
+      setNewCategoryName('')
+      setShowNewConceptInput(false)
+      setNewConceptName('')
     },
     onError: (e) => { if ((e as Error).message !== 'envelope_insufficient') alert('Error: ' + (e as Error).message) },
   })
@@ -563,34 +636,79 @@ export default function TransactionsPage() {
                   <label className="label">Categoría (opcional)</label>
                   <select 
                     className={clsx("input w-full", prefilledFields.category_id && "opacity-60 border-slate-700/50 bg-slate-800/40 text-slate-450 hover:opacity-85 focus:opacity-100 transition-opacity")} 
-                    value={form.category_id} 
+                    value={showNewCategoryInput ? 'CREATE_NEW' : form.category_id} 
                     onChange={e => {
-                      setForm(f => ({ ...f, category_id: e.target.value, concept_id: '', expense_item_id: '' }))
-                      setPrefilledFields(prev => ({ ...prev, category_id: false, concept_id: false, expense_item_id: false }))
+                      if (e.target.value === 'CREATE_NEW') {
+                        setShowNewCategoryInput(true)
+                        setShowNewConceptInput(true) // Forzar concepto nuevo para nueva categoría
+                        setForm(f => ({ ...f, category_id: '', concept_id: '', expense_item_id: '' }))
+                        setPrefilledFields(prev => ({ ...prev, category_id: false, concept_id: false, expense_item_id: false }))
+                      } else {
+                        setShowNewCategoryInput(false)
+                        setForm(f => ({ ...f, category_id: e.target.value, concept_id: '', expense_item_id: '' }))
+                        setPrefilledFields(prev => ({ ...prev, category_id: false, concept_id: false, expense_item_id: false }))
+                        setShowNewConceptInput(false)
+                      }
                     }}
                   >
                     <option value="">Todas las categorías</option>
                     {categories.filter(c => c.type === 'expense').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    <option value="CREATE_NEW">+ Crear nueva categoría...</option>
                   </select>
                 </div>
                 <div>
                   <label className="label">Concepto (opcional)</label>
                   <select 
                     className={clsx("input w-full", prefilledFields.concept_id && "opacity-60 border-slate-700/50 bg-slate-800/40 text-slate-450 hover:opacity-85 focus:opacity-100 transition-opacity")} 
-                    value={form.concept_id} 
+                    value={showNewConceptInput ? 'CREATE_NEW' : form.concept_id} 
                     onChange={e => {
-                      const cid = e.target.value
-                      const matching = expenseItems.find(i => i.concept_id === cid)
-                      setForm(f => ({ ...f, concept_id: cid, expense_item_id: matching ? matching.id : '' }))
-                      setPrefilledFields(prev => ({ ...prev, concept_id: false, expense_item_id: false }))
+                      if (e.target.value === 'CREATE_NEW') {
+                        setShowNewConceptInput(true)
+                        setForm(f => ({ ...f, concept_id: '', expense_item_id: '' }))
+                        setPrefilledFields(prev => ({ ...prev, concept_id: false, expense_item_id: false }))
+                      } else {
+                        setShowNewConceptInput(false)
+                        const cid = e.target.value
+                        const matching = expenseItems.find(i => i.concept_id === cid)
+                        setForm(f => ({ ...f, concept_id: cid, expense_item_id: matching ? matching.id : '' }))
+                        setPrefilledFields(prev => ({ ...prev, concept_id: false, expense_item_id: false }))
+                      }
                     }} 
-                    disabled={!form.category_id}
+                    disabled={!form.category_id && !showNewCategoryInput}
                   >
                     <option value="">Todos los conceptos</option>
                     {filteredConcepts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {(form.category_id || showNewCategoryInput) && <option value="CREATE_NEW">+ Crear nuevo concepto...</option>}
                   </select>
                 </div>
-                {filteredExpenseItems.length > 0 && (
+
+                {/* Campo rápido para crear categoría */}
+                {showNewCategoryInput && (
+                  <div className="sm:col-span-2">
+                    <label className="label text-indigo-400">Nombre de la nueva categoría</label>
+                    <input
+                      className="input w-full border-indigo-500/50"
+                      placeholder="Ej: Salud Familiar"
+                      value={newCategoryName}
+                      onChange={e => setNewCategoryName(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {/* Campo rápido para crear concepto */}
+                {showNewConceptInput && (
+                  <div className="sm:col-span-2">
+                    <label className="label text-indigo-400">Nombre del nuevo concepto</label>
+                    <input
+                      className="input w-full border-indigo-500/50"
+                      placeholder="Ej: Otros (o Medicinas)"
+                      value={newConceptName}
+                      onChange={e => setNewConceptName(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {!showNewCategoryInput && !showNewConceptInput && filteredExpenseItems.length > 0 && (
                   <div className="sm:col-span-2">
                     <label className="label">Gasto presupuestal</label>
                     <select 
@@ -707,7 +825,13 @@ export default function TransactionsPage() {
             <button className="btn-ghost" onClick={() => { setShowForm(false); setEnvelopeAlert(null); setPrefilledFields({}); }}>Cancelar</button>
             <button
               className="btn-primary"
-              disabled={form.amount <= 0 || saveTransaction.isPending || (form.mode === 'adjustment' && !form.note.trim())}
+              disabled={
+                form.amount <= 0 || 
+                saveTransaction.isPending || 
+                (form.mode === 'adjustment' && !form.note.trim()) ||
+                (form.mode === 'expense' && showNewCategoryInput && !newCategoryName.trim()) ||
+                (form.mode === 'expense' && showNewConceptInput && !newConceptName.trim())
+              }
               onClick={() => saveTransaction.mutate()}
             >
               {saveTransaction.isPending ? 'Guardando...' : 'Registrar movimiento'}
