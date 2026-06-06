@@ -754,7 +754,27 @@ export default function TransactionsPage() {
           const conName = concepts.find(c => c.id === tx.concept_id)?.name
           const srcAcc = accounts.find(a => a.id === tx.source_account_id)?.name
           const dstAcc = accounts.find(a => a.id === tx.destination_account_id)?.name
-          const isDebit = ['expense', 'transfer_external_out', 'tax_4x1000', 'adjustment'].includes(tx.type)
+          // Determine sign and color based on perspective (selected account)
+          let sign = ''
+          let colorClass = 'text-slate-300'
+          if (tx.type === 'transfer_internal') {
+            if (accountFilter === tx.source_account_id) {
+              sign = '-'
+              colorClass = 'text-red-400'
+            } else if (accountFilter === tx.destination_account_id) {
+              sign = '+'
+              colorClass = 'text-emerald-400'
+            } else {
+              // Neutral if no account is filtered
+              sign = ''
+              colorClass = 'text-slate-400'
+            }
+          } else {
+            const isDebit = ['expense', 'transfer_external_out', 'tax_4x1000', 'adjustment'].includes(tx.type)
+            sign = isDebit ? '-' : '+'
+            colorClass = isDebit ? 'text-red-400' : 'text-emerald-400'
+          }
+
           return (
             <div key={tx.id} className="card p-0 overflow-hidden">
               <div 
@@ -794,8 +814,8 @@ export default function TransactionsPage() {
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0 flex items-center gap-3">
-                  <p className={clsx('font-semibold text-sm', isDebit ? 'text-red-400' : 'text-emerald-400')}>
-                    {isDebit ? '-' : '+'}{formatCOP(tx.amount)}
+                  <p className={clsx('font-semibold text-sm', colorClass)}>
+                    {sign}{formatCOP(tx.amount)}
                   </p>
                   <ChevronDown size={15} className={clsx('text-slate-500 transition-transform', expandedTxId === tx.id && 'rotate-180')} />
                 </div>
