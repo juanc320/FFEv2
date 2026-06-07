@@ -7,7 +7,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { useActiveMonth } from '@/features/months/MonthsPage'
 import type { Transaction, Account, MonthlyExpenseItem, MonthlyIncomeItem, Category, Concept } from '@/shared/types/database'
 import { formatCOP, calc4x1000, calcEnvelopeAvailable } from '@/shared/utils/calculations'
-import { Plus, ArrowLeftRight, TrendingUp, TrendingDown, AlertTriangle, Zap, Trash2, ChevronDown } from 'lucide-react'
+import { Plus, ArrowLeftRight, TrendingUp, TrendingDown, AlertTriangle, Zap, Trash2, ChevronDown, Search } from 'lucide-react'
 import clsx from 'clsx'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
@@ -114,6 +114,7 @@ export default function TransactionsPage() {
   const [envelopeAlert, setEnvelopeAlert] = useState<{ shortfall: number; itemId: string } | null>(null)
   const [filterType, setFilterType] = useState<string>('all')
   const [accountFilter, setAccountFilter] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState<string>('')
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<any>(null)
   const [prefilledFields, setPrefilledFields] = useState<Record<string, boolean>>({})
@@ -535,6 +536,28 @@ export default function TransactionsPage() {
         return false
       }
     }
+    // Apply search query filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      const catName = categories.find(c => c.id === t.category_id)?.name?.toLowerCase() || ''
+      const conName = concepts.find(c => c.id === t.concept_id)?.name?.toLowerCase() || ''
+      const srcAcc = accounts.find(a => a.id === t.source_account_id)?.name?.toLowerCase() || ''
+      const dstAcc = accounts.find(a => a.id === t.destination_account_id)?.name?.toLowerCase() || ''
+      const note = t.note?.toLowerCase() || ''
+      const amountStr = String(t.amount)
+      const formattedAmount = formatCOP(t.amount).toLowerCase()
+
+      const match = 
+        catName.includes(query) ||
+        conName.includes(query) ||
+        srcAcc.includes(query) ||
+        dstAcc.includes(query) ||
+        note.includes(query) ||
+        amountStr.includes(query) ||
+        formattedAmount.includes(query)
+
+      if (!match) return false
+    }
     return true
   })
 
@@ -857,6 +880,18 @@ export default function TransactionsPage() {
           </div>
         </div>
       )}
+
+      {/* Search Bar */}
+      <div className="relative">
+        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+        <input 
+          type="text"
+          placeholder="Buscar por concepto, categoría, nota o valor (ej: 47.600)..."
+          className="input pl-10 pr-4 py-2 w-full bg-slate-800/50 border-slate-750 text-white placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-all"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
+      </div>
 
       {/* Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
