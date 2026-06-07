@@ -7,7 +7,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { useActiveMonth } from '@/features/months/MonthsPage'
 import type { MonthlyExpenseItem, Category, Concept } from '@/shared/types/database'
 import { formatCOP, calcEnvelopeAvailable } from '@/shared/utils/calculations'
-import { Plus, AlertTriangle, CheckCircle, Clock, ChevronDown, Edit2, Trash2, Tag, Calendar, Shield, PiggyBank } from 'lucide-react'
+import { Plus, AlertTriangle, CheckCircle, Clock, ChevronDown, Edit2, Trash2, Tag, Calendar, Shield, PiggyBank, Search } from 'lucide-react'
 import { syncPeriodicExpenses } from '@/shared/utils/periodicSync'
 import clsx from 'clsx'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
@@ -89,6 +89,7 @@ export default function ExpensesPage() {
   const [form, setForm] = useState(EMPTY)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showZeroItems, setShowZeroItems] = useState(false)
+  const [searchQuery, setSearchQuery] = useState<string>('')
   
   // Tab state: 'obligations' (fixed & sporadic) or 'envelopes' (variable)
   const [activeTab, setActiveTab] = useState<'obligations' | 'envelopes'>(() => {
@@ -250,14 +251,70 @@ export default function ExpensesPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
   })
 
+  // Filter items based on search query
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items
+    const query = searchQuery.toLowerCase().trim()
+    return items.filter(item => {
+      const catName = categories.find(c => c.id === item.category_id)?.name?.toLowerCase() || ''
+      const conName = concepts.find(c => c.id === item.concept_id)?.name?.toLowerCase() || ''
+      
+      // Criticidad
+      const critLabel = 
+        item.criticality === 'critical' ? 'crítico' :
+        item.criticality === 'necessary' ? 'necesario' :
+        item.criticality === 'desirable' ? 'desirable deseable' :
+        item.criticality === 'optional' ? 'opcional' : ''
+      
+      // Estado
+      const tag = getStatusTag(item)
+      const statusLabel = tag.label.toLowerCase()
+
+      // Montos y cálculos
+      const budgetTotal = item.budget_amount + item.arrears_amount
+      const executed = item.executed_amount_cached
+      const available = calcEnvelopeAvailable(item.budget_amount, item.arrears_amount, 0, 0, executed, item.deferred_amount)
+      const pending = Math.max(budgetTotal - executed - item.deferred_amount, 0)
+      
+      const budgetStr = String(item.budget_amount)
+      const arrearsStr = String(item.arrears_amount)
+      const executedStr = String(item.executed_amount_cached)
+      const availableStr = String(available)
+      const pendingStr = String(pending)
+
+      const fBudget = formatCOP(item.budget_amount).toLowerCase()
+      const fArrears = formatCOP(item.arrears_amount).toLowerCase()
+      const fExecuted = formatCOP(executed).toLowerCase()
+      const fAvailable = formatCOP(available).toLowerCase()
+      const fPending = formatCOP(pending).toLowerCase()
+
+      return (
+        catName.includes(query) ||
+        conName.includes(query) ||
+        critLabel.includes(query) ||
+        statusLabel.includes(query) ||
+        budgetStr.includes(query) ||
+        arrearsStr.includes(query) ||
+        executedStr.includes(query) ||
+        availableStr.includes(query) ||
+        pendingStr.includes(query) ||
+        fBudget.includes(query) ||
+        fArrears.includes(query) ||
+        fExecuted.includes(query) ||
+        fAvailable.includes(query) ||
+        fPending.includes(query)
+      )
+    })
+  }, [items, searchQuery, categories, concepts])
+
   // Separate lists of items
   const obligationsItems = useMemo(() => {
-    return items.filter(i => i.expense_type === 'fixed' || i.expense_type === 'sporadic')
-  }, [items])
+    return filteredItems.filter(i => i.expense_type === 'fixed' || i.expense_type === 'sporadic')
+  }, [filteredItems])
 
   const envelopesItems = useMemo(() => {
-    return items.filter(i => i.expense_type === 'variable')
-  }, [items])
+    return filteredItems.filter(i => i.expense_type === 'variable')
+  }, [filteredItems])
 
   // KPIs for Obligations
   const obligationsStats = useMemo(() => {
@@ -409,6 +466,18 @@ export default function ExpensesPage() {
             <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-500 rounded-full" />
           )}
         </button>
+      </div>
+
+      {/* Search Bar */}
+      <div className="relative mt-4">
+        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+        <input 
+          type="text"
+          placeholder={activeTab === 'obligations' ? "Buscar obligación por concepto, categoría, estado o valor..." : "Buscar bolsillo por concepto, categoría, estado o valor..."}
+          className="input pl-10 pr-4 py-2 w-full bg-slate-800/50 border-slate-750 text-white placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-all"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+        />
       </div>
 
       {/* KPIs Display */}
@@ -573,16 +642,34 @@ export default function ExpensesPage() {
       {!isLoading && activeTab === 'obligations' && obligationsItems.length === 0 && (
         <div className="card text-center text-slate-500 py-12">
           <Shield className="text-slate-600 mx-auto mb-2" size={32} />
-          <p className="font-medium text-slate-400 mb-1">Sin obligaciones presupuestadas</p>
-          <p className="text-xs">Agrega facturas fijas, cuotas o deudas comprometidas de este mes.</p>
+          {searchQuery.trim() ? (
+            <>
+              <p className="font-medium text-slate-400 mb-1">Sin resultados</p>
+              <p className="text-xs">No encontramos obligaciones que coincidan con "{searchQuery}".</p>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-slate-400 mb-1">Sin obligaciones presupuestadas</p>
+              <p className="text-xs">Agrega facturas fijas, cuotas o deudas comprometidas de este mes.</p>
+            </>
+          )}
         </div>
       )}
 
       {!isLoading && activeTab === 'envelopes' && envelopesItems.length === 0 && (
         <div className="card text-center text-slate-500 py-12">
           <PiggyBank className="text-slate-600 mx-auto mb-2" size={32} />
-          <p className="font-medium text-slate-400 mb-1">Sin sobres de consumo activos</p>
-          <p className="text-xs">Crea bolsillos para tus gastos de mercado, gasolina o salidas del mes.</p>
+          {searchQuery.trim() ? (
+            <>
+              <p className="font-medium text-slate-400 mb-1">Sin resultados</p>
+              <p className="text-xs">No encontramos bolsillos que coincidan con "{searchQuery}".</p>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-slate-400 mb-1">Sin sobres de consumo activos</p>
+              <p className="text-xs">Crea bolsillos para tus gastos de mercado, gasolina o salidas del mes.</p>
+            </>
+          )}
         </div>
       )}
 
