@@ -155,3 +155,130 @@ export async function syncPeriodicExpenses(familyId: string) {
     }
   }
 }
+
+/**
+ * Sincroniza los ingresos periódicos de una familia con el mes presupuestal activo actual.
+ */
+export async function syncPeriodicIncomes(familyId: string) {
+  if (!familyId) return
+
+  // 1. Obtener el mes activo actual
+  const { data: activeMonth, error: monthErr } = await db
+    .from('budget_months')
+    .select('*')
+    .eq('family_id', familyId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (monthErr || !activeMonth) return
+
+  // 2. Obtener ingresos periódicos activos de la familia
+  const { data: periodicItems, error: periodicErr } = await db
+    .from('periodic_incomes')
+    .select('*')
+    .eq('family_id', familyId)
+    .eq('active', true)
+
+  if (periodicErr || !periodicItems) return
+
+  // 3. Obtener ingresos mensuales de tipo 'sporadic' para el mes activo
+  const { data: existingItems, error: itemsErr } = await db
+    .from('monthly_income_items')
+    .select('*')
+    .eq('month_id', activeMonth.id)
+    .eq('income_type', 'sporadic')
+
+  if (itemsErr || !existingItems) return
+
+  const { year, month } = activeMonth
+
+  // 4. Filtrar cuáles de los ingresos periódicos corresponden a este mes activo
+  const periodicToInject = (periodicItems as any[]).filter((p: any) => {
+    const intervalMonths = p.periodicity === 'quarterly' ? 3 : p.periodicity === 'semi_annual' ? 6 : 12
+    const diffMonths = (year - p.start_year) * 12 + (month - p.start_month)
+    return diffMonths >= 0 && diffMonths % intervalMonths === 0
+  })
+
+  // 5. Agrupar por concept_id o etiqueta para hacer un emparejamiento posicional
+  const periodicByGroup: Record<string, any[]> = {}
+  for (const p of periodicToInject) {
+    const key = p.concept_id || `label:${p.label}`
+    if (!periodicByGroup[key]) periodicByGroup[key] = []
+    periodicByGroup[key].push(p)
+  }
+
+  const existingByGroup: Record<string, any[]> = {}
+  for (const item of (existingItems as any[])) {
+    const key = item.concept_id || `label:${item.label}`
+    if (!existingByGroup[key]) existingByGroup[key] = []
+    existingByGroup[key].push(item)
+  }
+
+  // Obtener todos los grupos únicos involucrados
+  const allGroups = new Set([
+    ...Object.keys(periodicByGroup),
+    ...Object.keys(existingByGroup)
+  ])
+
+  // 6. Sincronizar cada grupo
+  for (const groupKey of allGroups) {
+    const P_g = periodicByGroup[groupKey] || []
+    const E_g = existingByGroup[groupKey] || []
+    const limit = Math.max(P_g.length, E_g.length)
+
+    for (let i = 0; i < limit; i++) {
+      const p = P_g[i]
+      const existing = E_g[i]
+
+      if (p && !existing) {
+        // Insertar nuevo ingreso para este grupo en el mes
+        const dueDate = p.due_day ? getDueDateForAccountingMonth(year, month, p.due_day) : null
+        await db.from('monthly_income_items').insert({
+          family_id: familyId,
+          month_id: activeMonth.id,
+          member_id: p.member_id || null,
+          concept_id: p.concept_id || null,
+          label: p.label,
+          gross_amount: p.amount,
+          deduction_type: 'none',
+          deduction_rate: 0,
+          deduction_amount: 0,
+          net_expected: p.amount,
+          expected_date: dueDate,
+          received_amount: 0,
+          status: 'pending',
+          is_recurring: false,
+          income_type: 'sporadic',
+        })
+      } else if (p && existing) {
+        // Actualizar el ingreso existente si difieren los valores clave
+        const dueDate = p.due_day ? getDueDateForAccountingMonth(year, month, p.due_day) : null
+        if (
+          Number(existing.gross_amount) !== Number(p.amount) ||
+          existing.expected_date !== dueDate ||
+          existing.label !== p.label ||
+          existing.member_id !== p.member_id
+        ) {
+          await db
+            .from('monthly_income_items')
+            .update({
+              gross_amount: p.amount,
+              net_expected: p.amount,
+              expected_date: dueDate,
+              label: p.label,
+              member_id: p.member_id || null,
+            })
+            .eq('id', existing.id)
+        }
+      } else if (!p && existing) {
+        // Eliminar el ingreso sobrante si no ha recibido pagos
+        if (Number(existing.received_amount) === 0) {
+          await db
+            .from('monthly_income_items')
+            .delete()
+            .eq('id', existing.id)
+        }
+      }
+    }
+  }
+}

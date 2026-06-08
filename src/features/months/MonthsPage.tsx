@@ -363,10 +363,52 @@ export default function MonthsPage() {
           }
         }
       }
+
+      // 5. Inyección automática de ingresos periódicos
+      if (newMonth) {
+        const { data: periodicIncomes } = await db.from('periodic_incomes')
+          .select('*')
+          .eq('family_id', profile!.family_id!)
+          .eq('active', true)
+
+        if (periodicIncomes && periodicIncomes.length > 0) {
+          const periodicIncomesToInject = periodicIncomes.filter((p: any) => {
+            const intervalMonths = p.periodicity === 'quarterly' ? 3 : p.periodicity === 'semi_annual' ? 6 : 12
+            const diffMonths = (year - p.start_year) * 12 + (month - p.start_month)
+            return diffMonths >= 0 && diffMonths % intervalMonths === 0
+          })
+
+          if (periodicIncomesToInject.length > 0) {
+            const monthlyIncomeItems = periodicIncomesToInject.map((p: any) => {
+              const dueDate = p.due_day ? getDueDateForAccountingMonth(year, month, p.due_day) : null
+              return {
+                family_id: profile!.family_id!,
+                month_id: newMonth.id,
+                member_id: p.member_id || null,
+                concept_id: p.concept_id || null,
+                label: p.label,
+                gross_amount: p.amount,
+                deduction_type: 'none',
+                deduction_rate: 0,
+                deduction_amount: 0,
+                net_expected: p.amount,
+                expected_date: dueDate,
+                received_amount: 0,
+                status: 'pending',
+                is_recurring: false,
+                income_type: 'sporadic',
+              }
+            })
+            await db.from('monthly_income_items').insert(monthlyIncomeItems)
+          }
+        }
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['budget_months'] })
       qc.invalidateQueries({ queryKey: ['active_month'] })
+      qc.invalidateQueries({ queryKey: ['income_items'] })
+      qc.invalidateQueries({ queryKey: ['expense_items'] })
       setShowForm(false)
     },
   })

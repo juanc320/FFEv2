@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
@@ -9,6 +9,7 @@ import { formatCOP, calcNetIncome } from '@/shared/utils/calculations'
 import { Plus, TrendingUp, AlertTriangle, CheckCircle, Clock, Pencil, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
+import { syncPeriodicIncomes } from '@/shared/utils/periodicSync'
 
 const DEDUCTION_PRESETS = [
   { label: '8%', rate: 0.08 },
@@ -68,6 +69,67 @@ export default function IncomePage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [editingItem, setEditingItem] = useState<MonthlyIncomeItem | null>(null)
+
+  const { data: periodicIncomes = [] } = useQuery({
+    queryKey: ['periodic_incomes', profile?.family_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('periodic_incomes')
+        .select('*')
+        .eq('family_id', profile!.family_id!)
+        .eq('active', true)
+      return (data ?? []) as any[]
+    },
+    enabled: !!profile?.family_id,
+  })
+
+  useEffect(() => {
+    if (profile?.family_id) {
+      syncPeriodicIncomes(profile.family_id).then(() => {
+        qc.invalidateQueries({ queryKey: ['income_items'] })
+      })
+    }
+  }, [profile?.family_id, qc])
+
+  const periodicLabelsMap = useMemo(() => {
+    if (!activeMonth || periodicIncomes.length === 0 || items.length === 0) return new Map<string, string>()
+    const map = new Map<string, string>()
+    const { year, month } = activeMonth
+
+    const periodicToInject = periodicIncomes.filter((p: any) => {
+      const intervalMonths = p.periodicity === 'quarterly' ? 3 : p.periodicity === 'semi_annual' ? 6 : 12
+      const diffMonths = (year - p.start_year) * 12 + (month - p.start_month)
+      return diffMonths >= 0 && diffMonths % intervalMonths === 0
+    })
+
+    const periodicByGroup: Record<string, any[]> = {}
+    for (const p of periodicToInject) {
+      const key = p.concept_id || `label:${p.label}`
+      if (!periodicByGroup[key]) periodicByGroup[key] = []
+      periodicByGroup[key].push(p)
+    }
+
+    const sporadicItems = items.filter(item => item.income_type === 'sporadic')
+    const existingByGroup: Record<string, any[]> = {}
+    for (const item of sporadicItems) {
+      const key = item.concept_id || `label:${item.label}`
+      if (!existingByGroup[key]) existingByGroup[key] = []
+      existingByGroup[key].push(item)
+    }
+
+    for (const groupKey of Object.keys(existingByGroup)) {
+      const E_g = existingByGroup[groupKey] || []
+      const P_g = periodicByGroup[groupKey] || []
+      for (let i = 0; i < E_g.length; i++) {
+        const item = E_g[i]
+        const p = P_g[i]
+        if (item && p) {
+          map.set(item.id, p.label)
+        }
+      }
+    }
+    return map
+  }, [activeMonth, periodicIncomes, items])
 
   const netPreview = calcNetIncome(form.gross_amount, form.deduction_type, form.deduction_rate, form.deduction_amount)
 
@@ -360,15 +422,18 @@ export default function IncomePage() {
         </div>
       )}
       <div className="space-y-3">
-        {items.map(item => (
-          <IncomeCard 
-            key={item.id} 
-            item={item} 
-            internalAccounts={accounts.filter(a => a.is_internal)}
-            onMarkReceived={(amount, accountId) => markReceived.mutate({ id: item.id, amount, netExpected: item.net_expected, accountId, label: item.label })} 
-            onEdit={() => handleEdit(item)}
-          />
-        ))}
+        {items.map(item => {
+          const displayName = periodicLabelsMap.get(item.id) || item.label
+          return (
+            <IncomeCard 
+              key={item.id} 
+              item={{ ...item, label: displayName }} 
+              internalAccounts={accounts.filter(a => a.is_internal)}
+              onMarkReceived={(amount, accountId) => markReceived.mutate({ id: item.id, amount, netExpected: item.net_expected, accountId, label: displayName })} 
+              onEdit={() => handleEdit({ ...item, label: displayName })}
+            />
+          )
+        })}
       </div>
     </div>
   )

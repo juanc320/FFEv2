@@ -26,7 +26,8 @@ export interface Account { id: string; family_id: string; name: string; type: Ac
 export interface Category { id: string; family_id: string; name: string; type: CategoryType; active: boolean; created_at: string }
 export interface Concept { id: string; family_id: string; category_id: string; name: string; active: boolean; created_at: string }
 export interface BudgetMonth { id: string; family_id: string; year: number; month: number; status: MonthStatus; currency: string; copied_from_month_id: string | null; created_at: string; closed_at: string | null }
-export interface MonthlyIncomeItem { id: string; month_id: string; family_id: string; member_id: string | null; concept_id: string | null; label: string; gross_amount: number; deduction_type: DeductionType; deduction_rate: number; deduction_amount: number; net_expected: number; expected_date: string | null; received_amount: number; status: IncomeStatus; is_recurring: boolean; created_at: string }
+export interface MonthlyIncomeItem { id: string; month_id: string; family_id: string; member_id: string | null; concept_id: string | null; label: string; gross_amount: number; deduction_type: DeductionType; deduction_rate: number; deduction_amount: number; net_expected: number; expected_date: string | null; received_amount: number; status: IncomeStatus; is_recurring: boolean; income_type?: 'fixed' | 'sporadic'; created_at: string }
+export interface PeriodicIncome { id: string; family_id: string; member_id: string | null; concept_id: string | null; label: string; amount: number; periodicity: 'quarterly' | 'semi_annual' | 'annual'; start_month: number; start_year: number; due_day: number | null; active: boolean; created_at: string }
 export interface MonthlyExpenseItem { id: string; month_id: string; family_id: string; category_id: string; concept_id: string; expense_type: ExpenseType; criticality: Criticality; due_mode: DueMode; due_date: string | null; budget_amount: number; arrears_amount: number; executed_amount_cached: number; deferred_amount: number; status: ExpenseStatus; active_in_month: boolean; created_at: string; postponed?: boolean; is_mora_item?: boolean }
 export interface Transaction { id: string; family_id: string; month_id: string; type: TransactionType; amount: number; tax_amount: number; source_account_id: string | null; destination_account_id: string | null; external_party_label: string | null; category_id: string | null; concept_id: string | null; expense_item_id: string | null; income_item_id: string | null; is_automatic: boolean; parent_transaction_id: string | null; date: string; note: string | null; created_by: string | null; created_at: string }
 export interface BudgetReallocation { id: string; month_id: string; from_expense_item_id: string; to_expense_item_id: string; amount: number; reason: string | null; created_by: string | null; created_at: string }
@@ -51,6 +52,7 @@ export interface Database {
       budget_reallocations:   { Row: BudgetReallocation; Insert: Partial<BudgetReallocation>; Update: Partial<BudgetReallocation> }
       tax_rules:              { Row: TaxRule;            Insert: Partial<TaxRule>;            Update: Partial<TaxRule> }
       import_batches:         { Row: ImportBatch;        Insert: Partial<ImportBatch>;        Update: Partial<ImportBatch> }
+      periodic_incomes:       { Row: PeriodicIncome;     Insert: Partial<PeriodicIncome>;     Update: Partial<PeriodicIncome> }
     }
   }
 }
