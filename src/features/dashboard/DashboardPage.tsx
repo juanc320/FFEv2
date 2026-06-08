@@ -103,15 +103,14 @@ function useDashboardData() {
         }
       }
 
-      // Calculate account balances
-      const accountsWithBalance = (accounts || []).map((acc: Account) => {
-        let balance = acc.opening_balance || 0
-        ;(allTransactions || []).forEach((t: Transaction) => {
-          if (t.destination_account_id === acc.id) balance += Number(t.amount)
-          if (t.source_account_id === acc.id) balance -= (Number(t.amount) + Number(t.tax_amount || 0))
-        })
-        return { ...acc, current_balance: balance }
-      }).sort((a: any, b: any) => b.current_balance - a.current_balance)
+      // Calculate account balances using cached balance
+      const accountsWithBalance = (accounts || [])
+        .filter((acc: Account) => acc.is_internal && acc.active)
+        .map((acc: Account) => ({
+          ...acc,
+          current_balance: Number(acc.current_balance_cached) || 0
+        }))
+        .sort((a: any, b: any) => b.current_balance - a.current_balance)
 
       const totalBalance = accountsWithBalance.reduce((sum: number, acc: Account & { current_balance: number }) => sum + acc.current_balance, 0)
 
