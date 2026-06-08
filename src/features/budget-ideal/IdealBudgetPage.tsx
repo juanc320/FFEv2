@@ -208,7 +208,14 @@ export default function IdealBudgetPage() {
     return matchesSearch
   })
 
-  // Quick action toggles
+  const criticalities: ('critical' | 'necessary' | 'desirable' | 'optional')[] = ['critical', 'necessary', 'desirable', 'optional']
+
+  // Group filtered expenses by criticality
+  const groupedExpenses = criticalities.reduce((acc, crit) => {
+    acc[crit] = filteredExpenses.filter((item: any) => item.criticality === crit)
+    return acc
+  }, {} as Record<string, any[]>)
+
   const handleToggleAll = (checked: boolean) => {
     const newMap: Record<string, boolean> = {}
     expenses.forEach((item: any) => {
@@ -326,21 +333,10 @@ export default function IdealBudgetPage() {
 
           {activeTab === 'expenses' ? (
             <div className="space-y-4">
-              {/* Search and Quick Filters Panel */}
-              <div className="card space-y-3 bg-slate-900/60 border-slate-800">
-                <div className="relative">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Buscar gasto por concepto o categoría..."
-                    className="input w-full pl-10 text-sm"
-                  />
-                </div>
-                
-                {/* Quick actions row */}
-                <div className="flex flex-wrap gap-2 pt-1 border-t border-slate-800/80">
+              {/* Quick Filters Panel */}
+              <div className="card space-y-2.5 bg-slate-900/60 border-slate-800 py-3 px-4">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Acciones rápidas de simulación</span>
+                <div className="flex flex-wrap gap-2">
                   <button onClick={() => handleToggleAll(true)} className="btn-ghost-sm text-[10px] uppercase font-semibold text-slate-350">
                     Marcar todos
                   </button>
@@ -359,63 +355,81 @@ export default function IdealBudgetPage() {
                 </div>
               </div>
 
-              {/* Expense list */}
-              <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
+              {/* Expense list grouped by criticality */}
+              <div className="space-y-6 max-h-[65vh] overflow-y-auto pr-1">
                 {filteredExpenses.length === 0 ? (
                   <div className="card text-center py-12 border-slate-800 bg-slate-900/40">
                     <p className="text-slate-500 text-sm">No se encontraron gastos para simular.</p>
                   </div>
                 ) : (
-                  filteredExpenses.map((item: any) => {
-                    const isChecked = !!selectedExpenses[item.id]
-                    const totalAmount = Number(item.budget_amount || 0) + Number(item.arrears_amount || 0)
-                    const label = item.concepts?.name || item.categories?.name || 'Gasto'
-                    
+                  criticalities.map(crit => {
+                    const list = groupedExpenses[crit] || []
+                    if (list.length === 0) return null
+
                     return (
-                      <div
-                        key={item.id}
-                        onClick={() => toggleExpense(item.id)}
-                        className={clsx(
-                          'flex items-center gap-4 px-4 py-3 rounded-xl border transition-all cursor-pointer select-none',
-                          isChecked 
-                            ? 'bg-indigo-600/5 border-indigo-500/30' 
-                            : 'bg-slate-900/40 border-slate-800/80 opacity-55 hover:opacity-75'
-                        )}
-                      >
-                        {/* Custom checkbox */}
-                        <div className="flex-shrink-0 text-indigo-400">
-                          {isChecked ? <CheckSquare size={19} className="text-indigo-400" /> : <Square size={19} className="text-slate-600" />}
+                      <div key={crit} className="space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5 pt-2">
+                          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className={clsx('w-2 h-2 rounded-full', 
+                              crit === 'critical' ? 'bg-red-500 animate-pulse' :
+                              crit === 'necessary' ? 'bg-amber-500' :
+                              crit === 'desirable' ? 'bg-indigo-500' : 'bg-slate-400'
+                            )} />
+                            {CRITICALITY_LABELS[crit]} ({list.length})
+                          </h3>
                         </div>
+                        <div className="grid grid-cols-1 gap-2">
+                          {list.map((item: any) => {
+                            const isChecked = !!selectedExpenses[item.id]
+                            const totalAmount = Number(item.budget_amount || 0) + Number(item.arrears_amount || 0)
+                            const label = item.concepts?.name || item.categories?.name || 'Gasto'
+                            
+                            return (
+                              <div
+                                key={item.id}
+                                onClick={() => toggleExpense(item.id)}
+                                className={clsx(
+                                  'flex items-center gap-4 px-4 py-3 rounded-xl border transition-all cursor-pointer select-none',
+                                  isChecked 
+                                    ? 'bg-indigo-600/5 border-indigo-500/30' 
+                                    : 'bg-slate-900/40 border-slate-800/80 opacity-55 hover:opacity-75'
+                                )}
+                              >
+                                {/* Custom checkbox */}
+                                <div className="flex-shrink-0 text-indigo-400">
+                                  {isChecked ? <CheckSquare size={19} className="text-indigo-400" /> : <Square size={19} className="text-slate-600" />}
+                                </div>
 
-                        {/* Details */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center flex-wrap gap-2">
-                            <p className="text-slate-200 text-sm font-medium leading-tight truncate">{label}</p>
-                            {item.categories?.name && (
-                              <span className="text-slate-500 text-[10px]">· {item.categories.name}</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-1.5">
-                            <span className={clsx('text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase', CRITICALITY_COLORS[item.criticality as keyof typeof CRITICALITY_COLORS])}>
-                              {CRITICALITY_LABELS[item.criticality as keyof typeof CRITICALITY_LABELS]}
-                            </span>
-                            <span className={clsx('text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase', TYPE_COLORS[item.expense_type as keyof typeof TYPE_COLORS])}>
-                              {TYPE_LABELS[item.expense_type as keyof typeof TYPE_LABELS]}
-                            </span>
-                            {Number(item.arrears_amount) > 0 && (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase bg-red-500/10 text-red-400 border-red-500/25">
-                                Mora
-                              </span>
-                            )}
-                          </div>
-                        </div>
+                                {/* Details */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center flex-wrap gap-2">
+                                    <p className="text-slate-200 text-sm font-medium leading-tight truncate">{label}</p>
+                                    {item.categories?.name && (
+                                      <span className="text-slate-500 text-[10px]">· {item.categories.name}</span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-1.5">
+                                    <span className={clsx('text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase', TYPE_COLORS[item.expense_type as keyof typeof TYPE_COLORS])}>
+                                      {TYPE_LABELS[item.expense_type as keyof typeof TYPE_LABELS]}
+                                    </span>
+                                    {Number(item.arrears_amount) > 0 && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase bg-red-500/10 text-red-400 border-red-500/25">
+                                        Mora
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
 
-                        {/* Amount */}
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-white text-sm font-semibold">{formatCOP(totalAmount)}</p>
-                          {Number(item.arrears_amount) > 0 && (
-                            <p className="text-[10px] text-slate-500">Mora: {formatCOP(Number(item.arrears_amount))}</p>
-                          )}
+                                {/* Amount */}
+                                <div className="text-right flex-shrink-0">
+                                  <p className="text-white text-sm font-semibold">{formatCOP(totalAmount)}</p>
+                                  {Number(item.arrears_amount) > 0 && (
+                                    <p className="text-[10px] text-slate-500">Mora: {formatCOP(Number(item.arrears_amount))}</p>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
                     )
@@ -477,10 +491,27 @@ export default function IdealBudgetPage() {
         </div>
 
         {/* Right Side: Simulation Results & Actions */}
-        <div className="space-y-6">
+        <div className="space-y-4 lg:sticky lg:top-6 lg:h-fit">
           
+          {/* Search box on the side */}
+          {activeTab === 'expenses' && (
+            <div className="card p-4 bg-slate-900/80 border-slate-800 space-y-2">
+              <label className="text-slate-400 text-[10px] font-bold uppercase tracking-wider block">Buscar en gastos</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={13} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Ej: arriendo, comida..."
+                  className="input w-full pl-8 py-1.5 text-xs bg-slate-950/50 border-slate-850"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Sandbox Status Card */}
-          <div className="card bg-slate-900/80 border-slate-800 space-y-5 sticky top-6">
+          <div className="card bg-slate-900/80 border-slate-800 space-y-5">
             <h2 className="text-white font-semibold flex items-center gap-2 border-b border-slate-800/80 pb-3">
               Resumen de Simulación
             </h2>
