@@ -54,14 +54,53 @@ function useDashboardData() {
       // 4. Get active month items if month exists
       let expenses: MonthlyExpenseItem[] = []
       let incomes: MonthlyIncomeItem[] = []
+      let periodicExpenses: any[] = []
       
       if (month) {
-        const [expRes, incRes] = await Promise.all([
+        const [expRes, incRes, periodicRes] = await Promise.all([
           db.from('monthly_expense_items').select('*, categories(name), concepts(name)').eq('month_id', month.id).eq('active_in_month', true),
-          db.from('monthly_income_items').select('*').eq('month_id', month.id)
+          db.from('monthly_income_items').select('*').eq('month_id', month.id),
+          db.from('periodic_expenses').select('*').eq('family_id', familyId).eq('active', true)
         ])
         expenses = expRes.data || []
         incomes = incRes.data || []
+        periodicExpenses = periodicRes.data || []
+      }
+
+      const periodicLabelsMap = new Map<string, string>()
+      if (month && periodicExpenses.length > 0 && expenses.length > 0) {
+        const { year, month: monthNum } = month
+        const periodicToInject = periodicExpenses.filter((p: any) => {
+          if (!p.concept_id || !p.category_id) return false
+          const intervalMonths = p.periodicity === 'quarterly' ? 3 : p.periodicity === 'semi_annual' ? 6 : 12
+          const diffMonths = (year - p.start_year) * 12 + (monthNum - p.start_month)
+          return diffMonths >= 0 && diffMonths % intervalMonths === 0
+        })
+
+        const periodicByConcept: Record<string, any[]> = {}
+        for (const p of periodicToInject) {
+          if (!periodicByConcept[p.concept_id]) periodicByConcept[p.concept_id] = []
+          periodicByConcept[p.concept_id].push(p)
+        }
+
+        const sporadicItems = expenses.filter(item => item.expense_type === 'sporadic')
+        const existingByConcept: Record<string, any[]> = {}
+        for (const item of sporadicItems) {
+          if (!existingByConcept[item.concept_id]) existingByConcept[item.concept_id] = []
+          existingByConcept[item.concept_id].push(item)
+        }
+
+        for (const conceptId of Object.keys(existingByConcept)) {
+          const E_c = existingByConcept[conceptId] || []
+          const P_c = periodicByConcept[conceptId] || []
+          for (let i = 0; i < E_c.length; i++) {
+            const item = E_c[i]
+            const p = P_c[i]
+            if (item && p) {
+              periodicLabelsMap.set(item.id, p.label)
+            }
+          }
+        }
       }
 
       // Calculate account balances
@@ -105,7 +144,8 @@ function useDashboardData() {
         deferred += def
         totalBudgeted += budget
         
-        const name = (exp as any).concepts?.name || (exp as any).categories?.name || 'Gasto'
+        const conceptName = (exp as any).concepts?.name || (exp as any).categories?.name || 'Gasto'
+        const name = exp.expense_type === 'sporadic' ? (periodicLabelsMap.get(exp.id) || conceptName) : conceptName
         return { ...exp, available, executed, pct, name }
       })
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
@@ -86,6 +86,18 @@ function useIncomeItems() {
   })
 }
 
+function usePeriodicExpenses() {
+  const { profile } = useAuth()
+  return useQuery({
+    queryKey: ['periodic_expenses', profile?.family_id],
+    queryFn: async (): Promise<any[]> => {
+      const { data } = await supabase.from('periodic_expenses').select('*').eq('family_id', profile!.family_id!).eq('active', true)
+      return data ?? []
+    },
+    enabled: !!profile?.family_id,
+  })
+}
+
 const EMPTY_FORM = {
   mode: 'expense' as TxMode,
   amount: 0,
@@ -110,6 +122,7 @@ export default function TransactionsPage() {
   const { data: accounts = [] } = useAccounts()
   const { data: expenseItems = [] } = useExpenseItems()
   const { data: incomeItems = [] } = useIncomeItems()
+  const { data: periodicExpenses = [] } = usePeriodicExpenses()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [envelopeAlert, setEnvelopeAlert] = useState<{ shortfall: number; itemId: string } | null>(null)
@@ -124,6 +137,45 @@ export default function TransactionsPage() {
   const [showNewConceptInput, setShowNewConceptInput] = useState(false)
   const [newConceptName, setNewConceptName] = useState('')
   const [cameFromExpenses, setCameFromExpenses] = useState(false)
+
+  const periodicLabelsMap = useMemo(() => {
+    if (!activeMonth || periodicExpenses.length === 0 || expenseItems.length === 0) return new Map<string, string>()
+    const map = new Map<string, string>()
+    const { year, month } = activeMonth
+
+    const periodicToInject = periodicExpenses.filter((p: any) => {
+      if (!p.concept_id || !p.category_id) return false
+      const intervalMonths = p.periodicity === 'quarterly' ? 3 : p.periodicity === 'semi_annual' ? 6 : 12
+      const diffMonths = (year - p.start_year) * 12 + (month - p.start_month)
+      return diffMonths >= 0 && diffMonths % intervalMonths === 0
+    })
+
+    const periodicByConcept: Record<string, any[]> = {}
+    for (const p of periodicToInject) {
+      if (!periodicByConcept[p.concept_id]) periodicByConcept[p.concept_id] = []
+      periodicByConcept[p.concept_id].push(p)
+    }
+
+    const sporadicItems = expenseItems.filter(item => item.expense_type === 'sporadic')
+    const existingByConcept: Record<string, any[]> = {}
+    for (const item of sporadicItems) {
+      if (!existingByConcept[item.concept_id]) existingByConcept[item.concept_id] = []
+      existingByConcept[item.concept_id].push(item)
+    }
+
+    for (const conceptId of Object.keys(existingByConcept)) {
+      const E_c = existingByConcept[conceptId] || []
+      const P_c = periodicByConcept[conceptId] || []
+      for (let i = 0; i < E_c.length; i++) {
+        const item = E_c[i]
+        const p = P_c[i]
+        if (item && p) {
+          map.set(item.id, p.label)
+        }
+      }
+    }
+    return map
+  }, [activeMonth, periodicExpenses, expenseItems])
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -144,6 +196,7 @@ export default function TransactionsPage() {
         concept_id: location.state.prefillConceptId,
         expense_item_id: location.state.prefillExpenseId,
         amount: location.state.prefillAmount || 0,
+        note: location.state.prefillNote || '',
       }))
       setPrefilledFields({
         category_id: !!location.state.prefillCategoryId,
@@ -549,6 +602,8 @@ export default function TransactionsPage() {
       const query = searchQuery.toLowerCase().trim()
       const catName = categories.find(c => c.id === t.category_id)?.name?.toLowerCase() || ''
       const conName = concepts.find(c => c.id === t.concept_id)?.name?.toLowerCase() || ''
+      const matchedItem = expenseItems.find(i => i.id === t.expense_item_id)
+      const periodicLabel = matchedItem ? periodicLabelsMap.get(matchedItem.id)?.toLowerCase() || '' : ''
       const srcAcc = accounts.find(a => a.id === t.source_account_id)?.name?.toLowerCase() || ''
       const dstAcc = accounts.find(a => a.id === t.destination_account_id)?.name?.toLowerCase() || ''
       const note = t.note?.toLowerCase() || ''
@@ -558,6 +613,7 @@ export default function TransactionsPage() {
       const match = 
         catName.includes(query) ||
         conName.includes(query) ||
+        periodicLabel.includes(query) ||
         srcAcc.includes(query) ||
         dstAcc.includes(query) ||
         note.includes(query) ||
@@ -771,12 +827,14 @@ export default function TransactionsPage() {
                       <option value="">Ninguno / Gasto no presupuestado (Otros)</option>
                       {filteredExpenseItems.map(i => {
                         const conceptName = concepts.find(c => c.id === i.concept_id)?.name || 'Desconocido'
+                        const periodicLabel = periodicLabelsMap.get(i.id)
+                        const displayName = periodicLabel || conceptName
                         if (i.expense_type === 'variable') {
                           const avail = calcEnvelopeAvailable(i.budget_amount, i.arrears_amount, 0, 0, i.executed_amount_cached, i.deferred_amount)
-                          return <option key={i.id} value={i.id}>{conceptName} — Disponible: {formatCOP(avail)}</option>
+                          return <option key={i.id} value={i.id}>{displayName} — Disponible: {formatCOP(avail)}</option>
                         } else {
                           const pending = Math.max(0, i.budget_amount + i.arrears_amount - i.executed_amount_cached - i.deferred_amount)
-                          return <option key={i.id} value={i.id}>{conceptName} — Pendiente: {formatCOP(pending)}</option>
+                          return <option key={i.id} value={i.id}>{displayName} — Pendiente: {formatCOP(pending)}</option>
                         }
                       })}
                     </select>
@@ -931,6 +989,9 @@ export default function TransactionsPage() {
         {filtered.map(tx => {
           const catName = categories.find(c => c.id === tx.category_id)?.name
           const conName = concepts.find(c => c.id === tx.concept_id)?.name
+          const matchedItem = expenseItems.find(i => i.id === tx.expense_item_id)
+          const periodicLabel = matchedItem ? periodicLabelsMap.get(matchedItem.id) : null
+          const txTitle = tx.note || periodicLabel || conName || (catName ? `${catName} (Otros)` : MODE_LABELS[tx.type as TxMode] ?? tx.type)
           const srcAcc = accounts.find(a => a.id === tx.source_account_id)?.name
           const dstAcc = accounts.find(a => a.id === tx.destination_account_id)?.name
           // Determine sign and color based on perspective (selected account)
@@ -984,7 +1045,7 @@ export default function TransactionsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-slate-200 text-sm font-medium">
-                      {tx.note || conName || (catName ? `${catName} (Otros)` : MODE_LABELS[tx.type as TxMode] ?? tx.type)}
+                      {txTitle}
                     </p>
                     {tx.is_automatic && <span className="text-xs px-1.5 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded">Auto</span>}
                   </div>
@@ -1125,12 +1186,14 @@ export default function TransactionsPage() {
                                   (!editForm.category_id || i.category_id === editForm.category_id)
                                 ).map(i => {
                                   const conceptName = concepts.find(c => c.id === i.concept_id)?.name || 'Desconocido'
+                                  const periodicLabel = periodicLabelsMap.get(i.id)
+                                  const displayName = periodicLabel || conceptName
                                   if (i.expense_type === 'variable') {
                                     const avail = calcEnvelopeAvailable(i.budget_amount, i.arrears_amount, 0, 0, i.executed_amount_cached, i.deferred_amount)
-                                    return <option key={i.id} value={i.id}>{conceptName} — Disponible: {formatCOP(avail)}</option>
+                                    return <option key={i.id} value={i.id}>{displayName} — Disponible: {formatCOP(avail)}</option>
                                   } else {
                                     const pending = Math.max(0, i.budget_amount + i.arrears_amount - i.executed_amount_cached - i.deferred_amount)
-                                    return <option key={i.id} value={i.id}>{conceptName} — Pendiente: {formatCOP(pending)}</option>
+                                    return <option key={i.id} value={i.id}>{displayName} — Pendiente: {formatCOP(pending)}</option>
                                   }
                                 })}
                               </select>

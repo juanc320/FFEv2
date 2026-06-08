@@ -141,6 +141,58 @@ export default function ExpensesPage() {
     enabled: !!profile?.family_id,
   })
 
+  const { data: periodicExpenses = [] } = useQuery({
+    queryKey: ['periodic_expenses', profile?.family_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('periodic_expenses')
+        .select('*')
+        .eq('family_id', profile!.family_id!)
+        .eq('active', true)
+      return data ?? []
+    },
+    enabled: !!profile?.family_id,
+  })
+
+  const periodicLabelsMap = useMemo(() => {
+    if (!activeMonth || periodicExpenses.length === 0 || items.length === 0) return new Map<string, string>()
+    const map = new Map<string, string>()
+    const { year, month } = activeMonth
+
+    const periodicToInject = periodicExpenses.filter((p: any) => {
+      if (!p.concept_id || !p.category_id) return false
+      const intervalMonths = p.periodicity === 'quarterly' ? 3 : p.periodicity === 'semi_annual' ? 6 : 12
+      const diffMonths = (year - p.start_year) * 12 + (month - p.start_month)
+      return diffMonths >= 0 && diffMonths % intervalMonths === 0
+    })
+
+    const periodicByConcept: Record<string, any[]> = {}
+    for (const p of periodicToInject) {
+      if (!periodicByConcept[p.concept_id]) periodicByConcept[p.concept_id] = []
+      periodicByConcept[p.concept_id].push(p)
+    }
+
+    const sporadicItems = items.filter(item => item.expense_type === 'sporadic')
+    const existingByConcept: Record<string, any[]> = {}
+    for (const item of sporadicItems) {
+      if (!existingByConcept[item.concept_id]) existingByConcept[item.concept_id] = []
+      existingByConcept[item.concept_id].push(item)
+    }
+
+    for (const conceptId of Object.keys(existingByConcept)) {
+      const E_c = existingByConcept[conceptId] || []
+      const P_c = periodicByConcept[conceptId] || []
+      for (let i = 0; i < E_c.length; i++) {
+        const item = E_c[i]
+        const p = P_c[i]
+        if (item && p) {
+          map.set(item.id, p.label)
+        }
+      }
+    }
+    return map
+  }, [activeMonth, periodicExpenses, items])
+
   const filteredConcepts = concepts.filter(c => c.category_id === form.category_id)
 
   const createItem = useMutation({
@@ -258,6 +310,7 @@ export default function ExpensesPage() {
     return items.filter(item => {
       const catName = categories.find(c => c.id === item.category_id)?.name?.toLowerCase() || ''
       const conName = concepts.find(c => c.id === item.concept_id)?.name?.toLowerCase() || ''
+      const periodicName = periodicLabelsMap.get(item.id)?.toLowerCase() || ''
       
       // Criticidad
       const critLabel = 
@@ -291,6 +344,7 @@ export default function ExpensesPage() {
       return (
         catName.includes(query) ||
         conName.includes(query) ||
+        periodicName.includes(query) ||
         critLabel.includes(query) ||
         statusLabel.includes(query) ||
         budgetStr.includes(query) ||
@@ -305,7 +359,7 @@ export default function ExpensesPage() {
         fPending.includes(query)
       )
     })
-  }, [items, searchQuery, categories, concepts])
+  }, [items, searchQuery, categories, concepts, periodicLabelsMap])
 
   // Separate lists of items
   const obligationsItems = useMemo(() => {
@@ -683,6 +737,8 @@ export default function ExpensesPage() {
             </h3>
             {group.items.map(item => {
               const conName = concepts.find(c => c.id === item.concept_id)?.name ?? ''
+              const periodicLabel = periodicLabelsMap.get(item.id)
+              const displayName = periodicLabel || conName
               const totalDue = item.budget_amount + item.arrears_amount
               const executed = item.executed_amount_cached
               const pending = Math.max(0, totalDue - executed - item.deferred_amount)
@@ -716,7 +772,7 @@ export default function ExpensesPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className={clsx('text-sm font-medium', item.is_mora_item ? 'text-red-300' : 'text-slate-200')}>
-                          {conName}{item.is_mora_item ? ' — Mora' : ''}
+                          {displayName}{item.is_mora_item ? ' — Mora' : ''}
                         </p>
                         <span className={clsx('text-[10px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider', tag.color)}>
                           {tag.label}
@@ -842,7 +898,7 @@ export default function ExpensesPage() {
                             </div>
                           </div>
 
-                          <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-800/40">
+                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-800/40">
                             <div className="flex items-center gap-1.5">
                               <span className={clsx('text-xs px-2 py-0.5 rounded border', CRITICALITY_COLORS[item.criticality as keyof typeof CRITICALITY_COLORS])}>
                                 {CRITICALITY_LABELS[item.criticality as keyof typeof CRITICALITY_LABELS]}
@@ -853,7 +909,7 @@ export default function ExpensesPage() {
                               <button className="text-xs flex items-center gap-1 text-slate-400 hover:text-slate-200 transition-colors" onClick={() => {
                                 navigate('/transactions', { 
                                   state: { 
-                                    filterSearchQuery: conName
+                                    filterSearchQuery: displayName
                                   } 
                                 })
                               }}>
@@ -866,7 +922,8 @@ export default function ExpensesPage() {
                                       prefillExpenseId: item.id, 
                                       prefillCategoryId: item.category_id, 
                                       prefillConceptId: item.concept_id,
-                                      prefillAmount: pending
+                                      prefillAmount: pending,
+                                      prefillNote: periodicLabel || ''
                                     } 
                                   })
                                 }}>
@@ -1122,6 +1179,7 @@ export default function ExpensesPage() {
             <div className="space-y-2 mt-3">
               {(activeTab === 'obligations' ? zeroObligations : zeroEnvelopes).map(item => {
                 const conName = concepts.find(c => c.id === item.concept_id)?.name ?? ''
+                const displayName = periodicLabelsMap.get(item.id) || conName
                 const isExpanded = expandedId === item.id
                 const isEditing = editingId === item.id
                 
@@ -1133,7 +1191,7 @@ export default function ExpensesPage() {
                     >
                       <div className="flex items-center gap-2.5">
                         <Tag size={12} className="text-slate-500" />
-                        <span className="text-xs font-medium text-slate-400">{conName}</span>
+                        <span className="text-xs font-medium text-slate-400">{displayName}</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="text-[10px] px-1.5 py-0.5 rounded border border-slate-800 text-slate-500 bg-slate-800/20 font-medium">No aplica</span>
