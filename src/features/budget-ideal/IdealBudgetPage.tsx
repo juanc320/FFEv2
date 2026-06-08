@@ -59,6 +59,7 @@ export default function IdealBudgetPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [activeTab, setActiveTab] = useState<'expenses' | 'incomes'>('expenses')
+  const [showConfirm, setShowConfirm] = useState(false)
 
   // Fetch all monthly expenses (both active and inactive in the month)
   const { data: expenses = [] as any[], isLoading: isLoadingExpenses } = useQuery({
@@ -528,7 +529,7 @@ export default function IdealBudgetPage() {
 
             {/* Apply Button */}
             <button
-              onClick={() => applyBudgetMutation.mutate()}
+              onClick={() => setShowConfirm(true)}
               disabled={applyBudgetMutation.isPending}
               className="btn-primary w-full flex items-center justify-center gap-2 py-3"
             >
@@ -552,6 +553,39 @@ export default function IdealBudgetPage() {
         </div>
 
       </div>
+
+      {/* Confirmation Modal */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="card max-w-sm w-full bg-slate-900 border border-slate-800 space-y-4 p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-amber-400">
+              <AlertTriangle size={22} className="flex-shrink-0" />
+              <h3 className="text-white font-bold text-base">¿Aplicar presupuesto real?</h3>
+            </div>
+            <p className="text-slate-450 text-xs leading-normal">
+              Esta acción modificará la visibilidad y activación de tus gastos en el plan real de este mes según los elementos que seleccionaste en el simulador. 
+              Esto afectará el Dashboard y tu proyección.
+            </p>
+            <div className="flex gap-3 justify-end pt-2 border-t border-slate-800/80">
+              <button
+                className="btn-ghost py-2 px-4 text-xs font-semibold"
+                onClick={() => setShowConfirm(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn-primary py-2 px-4 text-xs font-semibold opacity-90 hover:opacity-100"
+                onClick={() => {
+                  setShowConfirm(false)
+                  applyBudgetMutation.mutate()
+                }}
+              >
+                Sí, aplicar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
