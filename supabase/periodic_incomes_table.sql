@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS public.periodic_incomes (
   start_year integer NOT NULL,
   due_day integer CHECK (due_day BETWEEN 1 AND 31),
   active boolean NOT NULL DEFAULT true,
+  deduction_type text DEFAULT 'none' CHECK (deduction_type IN ('none', 'percent', 'fixed', 'both')),
+  deduction_rate numeric(12,4) DEFAULT 0,
+  deduction_amount numeric(12,2) DEFAULT 0,
   created_at timestamptz DEFAULT now()
 );
 
@@ -30,3 +33,9 @@ CREATE POLICY "family_periodic_incomes" ON public.periodic_incomes
       SELECT family_id FROM public.profiles WHERE id = auth.uid()
     )
   );
+
+-- 5. Agregar columnas si la tabla ya existe
+ALTER TABLE public.periodic_incomes
+  ADD COLUMN IF NOT EXISTS deduction_type text DEFAULT 'none' CHECK (deduction_type IN ('none', 'percent', 'fixed', 'both')),
+  ADD COLUMN IF NOT EXISTS deduction_rate numeric(12,4) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS deduction_amount numeric(12,2) DEFAULT 0;

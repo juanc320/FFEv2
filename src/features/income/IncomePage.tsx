@@ -72,6 +72,9 @@ const EMPTY_PERIODIC_FORM = {
   start_month: new Date().getMonth() + 1,
   start_year: new Date().getFullYear(),
   due_day: '' as number | '',
+  deduction_type: 'none' as DeductionType,
+  deduction_rate: 0,
+  deduction_amount: 0,
 }
 
 const PERIODICITY_LABELS = {
@@ -256,6 +259,9 @@ export default function IncomePage() {
         start_month: periodicForm.start_month,
         start_year: periodicForm.start_year,
         due_day: periodicForm.due_day || null,
+        deduction_type: periodicForm.deduction_type || 'none',
+        deduction_rate: periodicForm.deduction_rate || 0,
+        deduction_amount: periodicForm.deduction_amount || 0,
         active: true,
       })
       await syncPeriodicIncomes(profile!.family_id!)
@@ -278,6 +284,9 @@ export default function IncomePage() {
         start_month: data.start_month,
         start_year: data.start_year,
         due_day: data.due_day || null,
+        deduction_type: data.deduction_type || 'none',
+        deduction_rate: data.deduction_rate || 0,
+        deduction_amount: data.deduction_amount || 0,
       }).eq('id', id)
       await syncPeriodicIncomes(profile!.family_id!)
     },
@@ -405,7 +414,13 @@ export default function IncomePage() {
   const periodicProjectedAnnual = useMemo(() => {
     return periodicIncomes.reduce((s: number, i: any) => {
       const mult = i.periodicity === 'quarterly' ? 4 : i.periodicity === 'semi_annual' ? 2 : 1
-      return s + (i.amount || 0) * mult
+      const net = calcNetIncome(
+        i.amount,
+        i.deduction_type || 'none',
+        i.deduction_rate || 0,
+        i.deduction_amount || 0
+      )
+      return s + net * mult
     }, 0)
   }, [periodicIncomes])
 
@@ -656,7 +671,7 @@ export default function IncomePage() {
               <input className="input w-full" placeholder="Ej: Bono trimestral" value={periodicForm.label} onChange={e => setPeriodicForm(f => ({ ...f, label: e.target.value }))} />
             </div>
             <div>
-              <label className="label">Monto por pago</label>
+              <label className="label">Bruto</label>
               <CurrencyInput className="input w-full" value={periodicForm.amount} onChange={val => setPeriodicForm(f => ({ ...f, amount: val }))} />
             </div>
             <div>
@@ -692,7 +707,44 @@ export default function IncomePage() {
               <label className="label">Día del mes (opcional)</label>
               <input type="number" min={1} max={31} className="input w-full" placeholder="Ej: 15" value={periodicForm.due_day} onChange={e => setPeriodicForm(f => ({ ...f, due_day: e.target.value ? Number(e.target.value) : '' }))} />
             </div>
+            <div>
+              <label className="label">Tipo de deducción</label>
+              <select className="input w-full" value={periodicForm.deduction_type} onChange={e => setPeriodicForm(f => ({ ...f, deduction_type: e.target.value as any, deduction_rate: 0, deduction_amount: 0 }))}>
+                <option value="none">Sin deducción</option>
+                <option value="percent">Porcentaje</option>
+                <option value="fixed">Monto fijo</option>
+                <option value="both">Ambos</option>
+              </select>
+            </div>
+            {(periodicForm.deduction_type === 'percent' || periodicForm.deduction_type === 'both') && (
+              <div>
+                <label className="label">% de deducción</label>
+                <div className="flex gap-2">
+                  <input type="number" min={0} max={100} step={0.1} className="input flex-1" placeholder="0" value={(periodicForm.deduction_rate || 0) * 100} onChange={e => setPeriodicForm(f => ({ ...f, deduction_rate: Number(e.target.value) / 100 }))} />
+                  {DEDUCTION_PRESETS.map(p => (
+                    <button key={p.label} type="button" className={clsx('px-3 py-2 rounded-xl text-xs font-medium border transition-all', periodicForm.deduction_rate === p.rate ? 'bg-indigo-600 border-indigo-500 text-white' : 'border-slate-700 text-slate-400 hover:text-white hover:border-slate-600')} onClick={() => setPeriodicForm(f => ({ ...f, deduction_rate: p.rate }))}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(periodicForm.deduction_type === 'fixed' || periodicForm.deduction_type === 'both') && (
+              <div>
+                <label className="label">Deducción fija</label>
+                <CurrencyInput className="input w-full" value={periodicForm.deduction_amount} onChange={val => setPeriodicForm(f => ({ ...f, deduction_amount: val }))} />
+              </div>
+            )}
           </div>
+          {/* Preview neto */}
+          {periodicForm.amount > 0 && periodicForm.deduction_type !== 'none' && (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 flex items-center justify-between">
+              <p className="text-emerald-300 text-sm">Neto estimado</p>
+              <p className="text-emerald-400 font-bold text-lg">
+                {formatCOP(calcNetIncome(periodicForm.amount, periodicForm.deduction_type || 'none', periodicForm.deduction_rate || 0, periodicForm.deduction_amount || 0))}
+              </p>
+            </div>
+          )}
           <div className="flex gap-3 justify-end">
             <button type="button" className="btn-ghost" onClick={() => { setShowPeriodicForm(false); setPeriodicForm(EMPTY_PERIODIC_FORM); }}>
               Cancelar
@@ -745,7 +797,13 @@ export default function IncomePage() {
           {!isLoading && periodicIncomes.map((item: any) => {
             const isExpanded = expandedPeriodicId === item.id
             const mult = item.periodicity === 'quarterly' ? 4 : item.periodicity === 'semi_annual' ? 2 : 1
-            const annualCost = item.amount * mult
+            const netAmount = calcNetIncome(
+              item.amount,
+              item.deduction_type || 'none',
+              item.deduction_rate || 0,
+              item.deduction_amount || 0
+            )
+            const annualCostNet = netAmount * mult
             const nextDates = getNextDueDates(item.start_month, item.start_year, item.periodicity)
             const badgeColor = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
 
@@ -766,6 +824,9 @@ export default function IncomePage() {
                           start_month: item.start_month,
                           start_year: item.start_year,
                           due_day: item.due_day || '',
+                          deduction_type: item.deduction_type || 'none',
+                          deduction_rate: item.deduction_rate || 0,
+                          deduction_amount: item.deduction_amount || 0,
                         }
                       }))
                     }
@@ -791,12 +852,12 @@ export default function IncomePage() {
                       })()}
                     </div>
                     <p className="text-slate-500 text-xs mt-0.5">
-                      Próx: {nextDates[0]} · {formatCOP(annualCost)}/año
+                      Próx: {nextDates[0]} · {formatCOP(annualCostNet)}/año
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="font-semibold text-sm text-emerald-400">{formatCOP(item.amount)}</p>
-                    <p className="text-slate-500 text-xs">por pago</p>
+                    <p className="font-semibold text-sm text-emerald-400">{formatCOP(netAmount)}</p>
+                    <p className="text-slate-500 text-xs">Bruto: {formatCOP(item.amount)}</p>
                   </div>
                   <ChevronDown size={15} className={clsx('text-slate-500 transition-transform flex-shrink-0', isExpanded && 'rotate-180')} />
                 </div>
@@ -817,7 +878,7 @@ export default function IncomePage() {
                         />
                       </div>
                       <div>
-                        <label className="label">Monto por pago</label>
+                        <label className="label">Bruto</label>
                         <CurrencyInput
                           className="input w-full"
                           value={editPeriodicForm[item.id].amount}
@@ -898,7 +959,90 @@ export default function IncomePage() {
                           }))}
                         />
                       </div>
+                      <div>
+                        <label className="label">Tipo de deducción</label>
+                        <select
+                          className="input w-full"
+                          value={editPeriodicForm[item.id].deduction_type || 'none'}
+                          onChange={e => setEditPeriodicForm(prev => ({
+                            ...prev,
+                            [item.id]: { ...prev[item.id], deduction_type: e.target.value as any, deduction_rate: 0, deduction_amount: 0 }
+                          }))}
+                        >
+                          <option value="none">Sin deducción</option>
+                          <option value="percent">Porcentaje</option>
+                          <option value="fixed">Monto fijo</option>
+                          <option value="both">Ambos</option>
+                        </select>
+                      </div>
+                      {(editPeriodicForm[item.id].deduction_type === 'percent' || editPeriodicForm[item.id].deduction_type === 'both') && (
+                        <div>
+                          <label className="label">% de deducción</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={0.1}
+                              className="input flex-1"
+                              placeholder="0"
+                              value={(editPeriodicForm[item.id].deduction_rate || 0) * 100}
+                              onChange={e => setEditPeriodicForm(prev => ({
+                                ...prev,
+                                [item.id]: { ...prev[item.id], deduction_rate: Number(e.target.value) / 100 }
+                              }))}
+                            />
+                            {DEDUCTION_PRESETS.map(p => (
+                              <button
+                                key={p.label}
+                                type="button"
+                                className={clsx(
+                                  'px-3 py-2 rounded-xl text-xs font-medium border transition-all',
+                                  editPeriodicForm[item.id].deduction_rate === p.rate
+                                    ? 'bg-indigo-600 border-indigo-500 text-white'
+                                    : 'border-slate-700 text-slate-400 hover:text-white hover:border-slate-600'
+                                )}
+                                onClick={() => setEditPeriodicForm(prev => ({
+                                  ...prev,
+                                  [item.id]: { ...prev[item.id], deduction_rate: p.rate }
+                                }))}
+                              >
+                                {p.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {(editPeriodicForm[item.id].deduction_type === 'fixed' || editPeriodicForm[item.id].deduction_type === 'both') && (
+                        <div>
+                          <label className="label">Deducción fija</label>
+                          <CurrencyInput
+                            className="input w-full"
+                            value={editPeriodicForm[item.id].deduction_amount || 0}
+                            onChange={val => setEditPeriodicForm(prev => ({
+                              ...prev,
+                              [item.id]: { ...prev[item.id], deduction_amount: val }
+                            }))}
+                          />
+                        </div>
+                      )}
                     </div>
+                    {/* Preview neto en edición */}
+                    {editPeriodicForm[item.id].amount > 0 && editPeriodicForm[item.id].deduction_type !== 'none' && (
+                      <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 flex items-center justify-between">
+                        <p className="text-emerald-300 text-sm">Neto estimado</p>
+                        <p className="text-emerald-400 font-bold text-lg">
+                          {formatCOP(
+                            calcNetIncome(
+                              editPeriodicForm[item.id].amount,
+                              editPeriodicForm[item.id].deduction_type || 'none',
+                              editPeriodicForm[item.id].deduction_rate || 0,
+                              editPeriodicForm[item.id].deduction_amount || 0
+                            )
+                          )}
+                        </p>
+                      </div>
+                    )}
 
                     <div className="flex justify-between items-center pt-1 mt-2 border-t border-slate-800/40">
                       <button

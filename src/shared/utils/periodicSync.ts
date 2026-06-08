@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { calcNetIncome } from '@/shared/utils/calculations'
 
 /**
  * Calcula la fecha límite correcta basada en el año, mes y día de corte/vencimiento.
@@ -233,6 +234,12 @@ export async function syncPeriodicIncomes(familyId: string) {
       if (p && !existing) {
         // Insertar nuevo ingreso para este grupo en el mes
         const dueDate = p.due_day ? getDueDateForAccountingMonth(year, month, p.due_day) : null
+        const netExpected = calcNetIncome(
+          p.amount,
+          p.deduction_type || 'none',
+          p.deduction_rate || 0,
+          p.deduction_amount || 0
+        )
         await db.from('monthly_income_items').insert({
           family_id: familyId,
           month_id: activeMonth.id,
@@ -240,10 +247,10 @@ export async function syncPeriodicIncomes(familyId: string) {
           concept_id: p.concept_id || null,
           label: p.label,
           gross_amount: p.amount,
-          deduction_type: 'none',
-          deduction_rate: 0,
-          deduction_amount: 0,
-          net_expected: p.amount,
+          deduction_type: p.deduction_type || 'none',
+          deduction_rate: p.deduction_rate || 0,
+          deduction_amount: p.deduction_amount || 0,
+          net_expected: netExpected,
           expected_date: dueDate,
           received_amount: 0,
           status: 'pending',
@@ -253,17 +260,29 @@ export async function syncPeriodicIncomes(familyId: string) {
       } else if (p && existing) {
         // Actualizar el ingreso existente si difieren los valores clave
         const dueDate = p.due_day ? getDueDateForAccountingMonth(year, month, p.due_day) : null
+        const netExpected = calcNetIncome(
+          p.amount,
+          p.deduction_type || 'none',
+          p.deduction_rate || 0,
+          p.deduction_amount || 0
+        )
         if (
           Number(existing.gross_amount) !== Number(p.amount) ||
           existing.expected_date !== dueDate ||
           existing.label !== p.label ||
-          existing.member_id !== p.member_id
+          existing.member_id !== p.member_id ||
+          existing.deduction_type !== (p.deduction_type || 'none') ||
+          Number(existing.deduction_rate) !== Number(p.deduction_rate || 0) ||
+          Number(existing.deduction_amount) !== Number(p.deduction_amount || 0)
         ) {
           await db
             .from('monthly_income_items')
             .update({
               gross_amount: p.amount,
-              net_expected: p.amount,
+              deduction_type: p.deduction_type || 'none',
+              deduction_rate: p.deduction_rate || 0,
+              deduction_amount: p.deduction_amount || 0,
+              net_expected: netExpected,
               expected_date: dueDate,
               label: p.label,
               member_id: p.member_id || null,
