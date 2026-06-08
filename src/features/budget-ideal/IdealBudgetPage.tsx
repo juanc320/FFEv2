@@ -89,12 +89,17 @@ export default function IdealBudgetPage() {
     enabled: !!activeMonth?.id
   })
 
+  const [saveSimulationSuccess, setSaveSimulationSuccess] = useState(false)
+
   // Initialize selected values from DB configuration
   useEffect(() => {
     if (expenses.length > 0) {
       const initialMap: Record<string, boolean> = {}
       expenses.forEach((item: any) => {
-        initialMap[item.id] = item.active_in_month
+        // Fallback to active_in_month if in_ideal_budget is not yet defined
+        initialMap[item.id] = item.in_ideal_budget !== undefined && item.in_ideal_budget !== null
+          ? item.in_ideal_budget
+          : item.active_in_month
       })
       setSelectedExpenses(initialMap)
     }
@@ -110,14 +115,54 @@ export default function IdealBudgetPage() {
     }
   }, [incomes])
 
-  // Apply to real budget mutation
+  // Save only simulation parameters (without applying to real budget)
+  const saveSimulationMutation = useMutation({
+    mutationFn: async () => {
+      const updates = expenses.map((item: any) => {
+        const isSelected = !!selectedExpenses[item.id]
+        if (isSelected !== item.in_ideal_budget) {
+          return db.from('monthly_expense_items')
+            .update({ in_ideal_budget: isSelected })
+            .eq('id', item.id)
+        }
+        return null
+      }).filter(Boolean)
+
+      if (updates.length > 0) {
+        await Promise.all(updates)
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['simulator_expense_items'] })
+      setSaveSimulationSuccess(true)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      setTimeout(() => setSaveSimulationSuccess(false), 5000)
+    },
+    onError: (err: any) => {
+      const errorMsg = err.message || err
+      if (errorMsg.includes('column "in_ideal_budget" of relation "monthly_expense_items" does not exist') || errorMsg.includes('in_ideal_budget')) {
+        alert('Error: La columna "in_ideal_budget" no existe en la base de datos. Por favor, ejecuta el script SQL en supabase/add_in_ideal_budget_column.sql en tu Supabase SQL Editor para habilitar esta funcionalidad.')
+      } else {
+        alert('Error al guardar la simulación: ' + errorMsg)
+      }
+    }
+  })
+
+  // Apply to real budget mutation (and keep ideal in sync)
   const applyBudgetMutation = useMutation({
     mutationFn: async () => {
       const updates = expenses.map((item: any) => {
         const isSelected = !!selectedExpenses[item.id]
-        if (isSelected !== item.active_in_month) {
+        const needsActiveUpdate = isSelected !== item.active_in_month
+        const needsIdealUpdate = isSelected !== item.in_ideal_budget
+
+        if (needsActiveUpdate || needsIdealUpdate) {
+          const payload: any = {}
+          if (needsActiveUpdate) payload.active_in_month = isSelected
+          if (needsIdealUpdate) payload.in_ideal_budget = isSelected
+
           return db.from('monthly_expense_items')
-            .update({ active_in_month: isSelected })
+            .update(payload)
             .eq('id', item.id)
         }
         return null
@@ -136,7 +181,12 @@ export default function IdealBudgetPage() {
       setTimeout(() => setSaveSuccess(false), 5000)
     },
     onError: (err: any) => {
-      alert('Error al aplicar el presupuesto ideal: ' + (err.message || err))
+      const errorMsg = err.message || err
+      if (errorMsg.includes('column "in_ideal_budget" of relation "monthly_expense_items" does not exist') || errorMsg.includes('in_ideal_budget')) {
+        alert('Error: La columna "in_ideal_budget" no existe en la base de datos. Por favor, ejecuta el script SQL en supabase/add_in_ideal_budget_column.sql en tu Supabase SQL Editor para habilitar esta funcionalidad.')
+      } else {
+        alert('Error al aplicar el presupuesto ideal: ' + errorMsg)
+      }
     }
   })
 
@@ -279,6 +329,20 @@ export default function IdealBudgetPage() {
             <p className="text-emerald-400/80 text-xs mt-0.5">
               Los gastos seleccionados se han activado/desactivado correctamente en tu presupuesto real del mes. 
               Los cambios ya son visibles en el Dashboard y en el Plan de Gastos.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Simulation success alert banner */}
+      {saveSimulationSuccess && (
+        <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl px-5 py-4 flex items-start gap-3 animate-fade-in">
+          <CheckCircle size={18} className="text-indigo-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-indigo-300 text-sm font-semibold">¡Plan de Simulación Guardado!</p>
+            <p className="text-indigo-400/80 text-xs mt-0.5">
+              Tu simulación de presupuesto ideal ha sido guardada. Podrás consultarla o editarla en el futuro 
+              sin que afecte tu presupuesto real ni las estadísticas del Dashboard.
             </p>
           </div>
         </div>
@@ -558,10 +622,29 @@ export default function IdealBudgetPage() {
               </div>
             </div>
 
+            {/* Save Simulation Button */}
+            <button
+              onClick={() => saveSimulationMutation.mutate()}
+              disabled={saveSimulationMutation.isPending || applyBudgetMutation.isPending}
+              className="btn-ghost w-full flex items-center justify-center gap-2 py-2.5 border border-slate-700 hover:border-slate-600 hover:bg-slate-800/50 text-xs font-semibold"
+            >
+              {saveSimulationMutation.isPending ? (
+                <>
+                  <RefreshCw className="animate-spin" size={15} />
+                  <span>Guardando simulación...</span>
+                </>
+              ) : (
+                <>
+                  <SlidersHorizontal size={15} className="text-indigo-400" />
+                  <span>Guardar Plan de Simulación</span>
+                </>
+              )}
+            </button>
+
             {/* Apply Button */}
             <button
               onClick={() => setShowConfirm(true)}
-              disabled={applyBudgetMutation.isPending}
+              disabled={applyBudgetMutation.isPending || saveSimulationMutation.isPending}
               className="btn-primary w-full flex items-center justify-center gap-2 py-3"
             >
               {applyBudgetMutation.isPending ? (
@@ -577,7 +660,7 @@ export default function IdealBudgetPage() {
               )}
             </button>
             <p className="text-[10px] text-slate-500 text-center leading-normal">
-              Al guardar, se actualizará tu plan de gastos real del mes, activando/desactivando los sobres en tu dashboard.
+              Al guardar en el plan real, se actualizará tu plan de gastos real del mes, activando/desactivando los sobres en tu dashboard.
             </p>
           </div>
 
