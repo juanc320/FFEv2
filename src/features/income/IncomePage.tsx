@@ -143,15 +143,16 @@ export default function IncomePage() {
     localStorage.setItem('ffev2_incomes_tab', tab)
   }
 
-  const { data: periodicIncomes = [] } = useQuery({
+  const { data: periodicIncomes = [], error: periodicIncomesError, isError: isPeriodicIncomesError } = useQuery({
     queryKey: ['periodic_incomes', profile?.family_id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('periodic_incomes')
         .select('*')
         .eq('family_id', profile!.family_id!)
         .eq('active', true)
         .order('amount', { ascending: false })
+      if (error) throw error
       return (data ?? []) as any[]
     },
     enabled: !!profile?.family_id,
@@ -229,7 +230,7 @@ export default function IncomePage() {
 
   const createItem = useMutation({
     mutationFn: async () => {
-      await db.from('monthly_income_items').insert({
+      const { error } = await db.from('monthly_income_items').insert({
         month_id: activeMonth!.id,
         family_id: profile!.family_id!,
         label: form.label,
@@ -243,14 +244,16 @@ export default function IncomePage() {
         is_recurring: form.income_type === 'fixed' ? form.is_recurring : false,
         income_type: form.income_type,
       })
+      if (error) throw error
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['income_items'] }); setShowForm(false); setForm(EMPTY_FORM) },
+    onError: (err: any) => { alert(`Error al agregar ingreso: ${err.message || err}`) },
   })
 
   // Mutations for periodic incomes (templates)
   const createPeriodicIncome = useMutation({
     mutationFn: async () => {
-      await db.from('periodic_incomes').insert({
+      const { error } = await db.from('periodic_incomes').insert({
         family_id: profile!.family_id!,
         member_id: periodicForm.member_id || null,
         label: periodicForm.label.trim(),
@@ -264,6 +267,7 @@ export default function IncomePage() {
         deduction_amount: periodicForm.deduction_amount || 0,
         active: true,
       })
+      if (error) throw error
       await syncPeriodicIncomes(profile!.family_id!)
     },
     onSuccess: () => {
@@ -272,11 +276,12 @@ export default function IncomePage() {
       setShowPeriodicForm(false)
       setPeriodicForm(EMPTY_PERIODIC_FORM)
     },
+    onError: (err: any) => { alert(`Error al crear plantilla: ${err.message || err}`) },
   })
 
   const updatePeriodicIncome = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      await db.from('periodic_incomes').update({
+      const { error } = await db.from('periodic_incomes').update({
         label: data.label.trim(),
         member_id: data.member_id || null,
         amount: data.amount,
@@ -288,6 +293,7 @@ export default function IncomePage() {
         deduction_rate: data.deduction_rate || 0,
         deduction_amount: data.deduction_amount || 0,
       }).eq('id', id)
+      if (error) throw error
       await syncPeriodicIncomes(profile!.family_id!)
     },
     onSuccess: () => {
@@ -295,6 +301,7 @@ export default function IncomePage() {
       qc.invalidateQueries({ queryKey: ['income_items'] })
       setExpandedPeriodicId(null)
     },
+    onError: (err: any) => { alert(`Error al actualizar plantilla: ${err.message || err}`) },
   })
 
   const deletePeriodicIncome = useMutation({
@@ -511,6 +518,13 @@ export default function IncomePage() {
           )}
         </button>
       </div>
+
+      {isPeriodicIncomesError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 text-red-400 text-sm flex items-center gap-2 animate-pulse">
+          <AlertTriangle size={16} className="flex-shrink-0" />
+          <span>Error de base de datos: {(periodicIncomesError as any)?.message}</span>
+        </div>
+      )}
 
       {activeTab === 'current_month' && showForm && (
         <div id="income-form" className="card space-y-4 bg-slate-900/60 border-emerald-500/30">
