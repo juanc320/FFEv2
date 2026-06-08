@@ -171,7 +171,11 @@ export async function syncPeriodicIncomes(familyId: string) {
     .eq('status', 'active')
     .maybeSingle()
 
-  if (monthErr || !activeMonth) return
+  if (monthErr) {
+    console.error('Error fetching active budget month in syncPeriodicIncomes:', monthErr)
+    throw monthErr
+  }
+  if (!activeMonth) return
 
   // 2. Obtener ingresos periódicos activos de la familia
   const { data: periodicItems, error: periodicErr } = await db
@@ -180,7 +184,11 @@ export async function syncPeriodicIncomes(familyId: string) {
     .eq('family_id', familyId)
     .eq('active', true)
 
-  if (periodicErr || !periodicItems) return
+  if (periodicErr) {
+    console.error('Error fetching periodic incomes in syncPeriodicIncomes:', periodicErr)
+    throw periodicErr
+  }
+  if (!periodicItems) return
 
   // 3. Obtener ingresos mensuales de tipo 'sporadic' para el mes activo
   const { data: existingItems, error: itemsErr } = await db
@@ -189,7 +197,11 @@ export async function syncPeriodicIncomes(familyId: string) {
     .eq('month_id', activeMonth.id)
     .eq('income_type', 'sporadic')
 
-  if (itemsErr || !existingItems) return
+  if (itemsErr) {
+    console.error('Error fetching existing sporadic monthly incomes in syncPeriodicIncomes:', itemsErr)
+    throw itemsErr
+  }
+  if (!existingItems) return
 
   const { year, month } = activeMonth
 
@@ -240,7 +252,7 @@ export async function syncPeriodicIncomes(familyId: string) {
           p.deduction_rate || 0,
           p.deduction_amount || 0
         )
-        await db.from('monthly_income_items').insert({
+        const { error: insErr } = await db.from('monthly_income_items').insert({
           family_id: familyId,
           month_id: activeMonth.id,
           member_id: p.member_id || null,
@@ -250,13 +262,16 @@ export async function syncPeriodicIncomes(familyId: string) {
           deduction_type: p.deduction_type || 'none',
           deduction_rate: p.deduction_rate || 0,
           deduction_amount: p.deduction_amount || 0,
-          net_expected: netExpected,
           expected_date: dueDate,
           received_amount: 0,
           status: 'pending',
           is_recurring: false,
           income_type: 'sporadic',
         })
+        if (insErr) {
+          console.error('Error inserting sporadic monthly income:', insErr)
+          throw insErr
+        }
       } else if (p && existing) {
         // Actualizar el ingreso existente si difieren los valores clave
         const dueDate = p.due_day ? getDueDateForAccountingMonth(year, month, p.due_day) : null
@@ -275,27 +290,34 @@ export async function syncPeriodicIncomes(familyId: string) {
           Number(existing.deduction_rate) !== Number(p.deduction_rate || 0) ||
           Number(existing.deduction_amount) !== Number(p.deduction_amount || 0)
         ) {
-          await db
+          const { error: updErr } = await db
             .from('monthly_income_items')
             .update({
               gross_amount: p.amount,
               deduction_type: p.deduction_type || 'none',
               deduction_rate: p.deduction_rate || 0,
               deduction_amount: p.deduction_amount || 0,
-              net_expected: netExpected,
               expected_date: dueDate,
               label: p.label,
               member_id: p.member_id || null,
             })
             .eq('id', existing.id)
+          if (updErr) {
+            console.error('Error updating sporadic monthly income:', updErr)
+            throw updErr
+          }
         }
       } else if (!p && existing) {
         // Eliminar el ingreso sobrante si no ha recibido pagos
         if (Number(existing.received_amount) === 0) {
-          await db
+          const { error: delErr } = await db
             .from('monthly_income_items')
             .delete()
             .eq('id', existing.id)
+          if (delErr) {
+            console.error('Error deleting sporadic monthly income:', delErr)
+            throw delErr
+          }
         }
       }
     }
