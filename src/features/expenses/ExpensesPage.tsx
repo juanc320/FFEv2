@@ -149,7 +149,7 @@ export default function ExpensesPage() {
         .select('*')
         .eq('family_id', profile!.family_id!)
         .eq('active', true)
-      return data ?? []
+      return (data ?? []) as any[]
     },
     enabled: !!profile?.family_id,
   })
