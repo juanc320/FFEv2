@@ -1125,7 +1125,7 @@ function IncomeCard({
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-slate-200 text-sm font-medium">{item.label}</p>
             {item.income_type === 'sporadic' && (
-              <span className="text-[9px] px-1.5 py-0.2 rounded border border-emerald-500/35 bg-emerald-500/10 text-emerald-400 font-semibold uppercase tracking-wider">
+              <span className="text-[9px] px-1.5 py-0.2 rounded border border-orange-500/30 bg-orange-500/10 text-orange-400 font-semibold uppercase tracking-wider">
                 Esporádico
               </span>
             )}
