@@ -342,16 +342,19 @@ export default function IncomePage() {
   const handleEdit = (item: MonthlyIncomeItem) => {
     setEditingItem(item)
     setForm({
-      label: item.label,
-      gross_amount: item.gross_amount,
-      deduction_type: item.deduction_type,
-      deduction_rate: item.deduction_rate,
-      deduction_amount: item.deduction_amount,
+      label: item.label || '',
+      gross_amount: item.gross_amount || 0,
+      deduction_type: item.deduction_type || 'none',
+      deduction_rate: item.deduction_rate || 0,
+      deduction_amount: item.deduction_amount || 0,
       expected_date: item.expected_date || '',
-      is_recurring: item.is_recurring,
+      is_recurring: !!item.is_recurring,
       income_type: item.income_type || 'fixed',
     })
     setShowForm(true)
+    setTimeout(() => {
+      document.getElementById('income-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
   }
 
   const markReceived = useMutation({
@@ -444,7 +447,17 @@ export default function IncomePage() {
             <Plus size={16} /> Nuevo periódico
           </button>
         ) : (
-          <button className="btn-primary flex items-center gap-2" onClick={() => { setEditingItem(null); setForm(EMPTY_FORM); setShowForm(true); }}>
+          <button
+            className="btn-primary flex items-center gap-2"
+            onClick={() => {
+              setEditingItem(null)
+              setForm(EMPTY_FORM)
+              setShowForm(true)
+              setTimeout(() => {
+                document.getElementById('income-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }, 50)
+            }}
+          >
             <Plus size={16} /> Nuevo ingreso
           </button>
         )}
@@ -485,7 +498,7 @@ export default function IncomePage() {
       </div>
 
       {activeTab === 'current_month' && showForm && (
-        <div className="card space-y-4 bg-slate-900/60 border-emerald-500/30">
+        <div id="income-form" className="card space-y-4 bg-slate-900/60 border-emerald-500/30">
           <h2 className="text-white font-semibold">
             {editingItem ? 'Editar ingreso esperado' : 'Nuevo ingreso esperado'}
           </h2>
@@ -578,7 +591,7 @@ export default function IncomePage() {
           )}
           {form.income_type === 'fixed' && (
             <label className="flex items-center gap-3 cursor-pointer">
-              <input type="checkbox" className="w-4 h-4 accent-indigo-500 rounded" checked={form.is_recurring} onChange={e => setForm(f => ({ ...f, is_recurring: e.target.checked }))} />
+              <input type="checkbox" className="w-4 h-4 accent-indigo-500 rounded" checked={!!form.is_recurring} onChange={e => setForm(f => ({ ...f, is_recurring: e.target.checked }))} />
               <span className="text-slate-300 text-sm">Ingreso recurrente (se copiará al siguiente mes)</span>
             </label>
           )}
