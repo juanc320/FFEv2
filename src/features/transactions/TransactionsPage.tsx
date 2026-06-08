@@ -583,15 +583,6 @@ export default function TransactionsPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {cameFromExpenses && (
-        <button 
-          onClick={() => navigate('/expenses')}
-          className="flex items-center gap-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors w-fit -mb-2 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-lg"
-        >
-          <ArrowLeft size={14} /> Volver a Plan de gastos
-        </button>
-      )}
-
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Movimientos</h1>
@@ -1191,6 +1182,17 @@ export default function TransactionsPage() {
           </div>
         )}
       </div>
+
+      {cameFromExpenses && (
+        <div className="flex justify-center pt-4 pb-8">
+          <button 
+            onClick={() => navigate('/expenses')}
+            className="flex items-center gap-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 border border-indigo-500/20 px-4 py-2 rounded-xl"
+          >
+            <ArrowLeft size={14} /> Volver a Plan de gastos
+          </button>
+        </div>
+      )}
     </div>
   )
 }
