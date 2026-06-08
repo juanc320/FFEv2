@@ -128,7 +128,11 @@ export default function TransactionsPage() {
   }, [])
 
   useEffect(() => {
-    if (location.state?.prefillExpenseId) {
+    if (location.state?.filterSearchQuery) {
+      setSearchQuery(location.state.filterSearchQuery)
+      window.history.replaceState({}, document.title)
+      window.scrollTo(0, 0)
+    } else if (location.state?.prefillExpenseId) {
       setShowForm(true)
       setForm(f => ({
         ...f,

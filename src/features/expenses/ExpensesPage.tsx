@@ -7,7 +7,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { useActiveMonth } from '@/features/months/MonthsPage'
 import type { MonthlyExpenseItem, Category, Concept } from '@/shared/types/database'
 import { formatCOP, calcEnvelopeAvailable } from '@/shared/utils/calculations'
-import { Plus, AlertTriangle, CheckCircle, Clock, ChevronDown, Edit2, Trash2, Tag, Calendar, Shield, PiggyBank, Search } from 'lucide-react'
+import { Plus, AlertTriangle, CheckCircle, Clock, ChevronDown, Edit2, Trash2, Tag, Calendar, Shield, PiggyBank, Search, List } from 'lucide-react'
 import { syncPeriodicExpenses } from '@/shared/utils/periodicSync'
 import clsx from 'clsx'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
@@ -850,6 +850,15 @@ export default function ExpensesPage() {
                             </div>
 
                             <div className="flex justify-end gap-4">
+                              <button className="text-xs flex items-center gap-1 text-slate-400 hover:text-slate-200 transition-colors" onClick={() => {
+                                navigate('/transactions', { 
+                                  state: { 
+                                    filterSearchQuery: conName
+                                  } 
+                                })
+                              }}>
+                                <List size={14} /> Ver movimientos
+                              </button>
                               {pending > 0 && (
                                 <button className="text-xs flex items-center gap-1 text-emerald-400 hover:text-emerald-300 transition-colors" onClick={() => {
                                   navigate('/transactions', { 
@@ -1051,6 +1060,15 @@ export default function ExpensesPage() {
                             </span>
 
                             <div className="flex justify-end gap-4">
+                              <button className="text-xs flex items-center gap-1 text-slate-400 hover:text-slate-200 transition-colors" onClick={() => {
+                                navigate('/transactions', { 
+                                  state: { 
+                                    filterSearchQuery: conName
+                                  } 
+                                })
+                              }}>
+                                <List size={14} /> Ver movimientos
+                              </button>
                               <button className="text-xs flex items-center gap-1 text-emerald-400 hover:text-emerald-300 transition-colors" onClick={() => {
                                 navigate('/transactions', { 
                                   state: { 
