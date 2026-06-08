@@ -16,6 +16,7 @@ import CategoriesPage from '@/features/categories/CategoriesPage'
 import FamilyPage from '@/features/family/FamilyPage'
 import ImportPage from '@/features/import/ImportPage'
 import PeriodicExpensesPage from '@/features/periodic/PeriodicExpensesPage'
+import IdealBudgetPage from '@/features/budget-ideal/IdealBudgetPage'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -52,6 +53,7 @@ export default function App() {
               <Route path="family"       element={<FamilyPage />} />
               <Route path="import"       element={<ImportPage />} />
               <Route path="periodic"     element={<PeriodicExpensesPage />} />
+              <Route path="ideal-budget" element={<IdealBudgetPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

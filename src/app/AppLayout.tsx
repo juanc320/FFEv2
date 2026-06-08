@@ -16,6 +16,7 @@ import {
   ChevronRight,
   TrendingUp,
   RefreshCw,
+  SlidersHorizontal,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -26,6 +27,7 @@ const navItems = [
   { to: '/accounts',  icon: Wallet,           label: 'Cuentas',     description: 'Cuentas y bolsillos' },
   { to: '/expenses',  icon: Receipt,    label: 'Plan de gastos',    description: 'Gastos del mes' },
   { to: '/periodic',  icon: RefreshCw,  label: 'Gastos periódicos', description: 'Trimestrales, anuales' },
+  { to: '/ideal-budget', icon: SlidersHorizontal, label: 'Presupuesto Ideal', description: 'Simulador estratégico' },
   { to: '/income',    icon: TrendingUp, label: 'Ingresos',          description: 'Ingresos esperados' },
   { to: '/categories', icon: Tag,             label: 'Categorías',  description: 'Categorías y conceptos' },
   { to: '/family',    icon: Users,            label: 'Familia',     description: 'Integrantes' },
@@ -67,29 +69,31 @@ export default function AppLayout() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {navItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            onClick={() => setMobileOpen(false)}
-            className={({ isActive }) =>
-              clsx(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group',
-                isActive
-                  ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800',
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon size={17} className={clsx('flex-shrink-0', isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300')} />
-                <span className="flex-1">{label}</span>
-                {isActive && <ChevronRight size={14} className="text-indigo-400 opacity-60" />}
-              </>
-            )}
-          </NavLink>
-        ))}
+        {navItems
+          .filter(item => item.to !== '/ideal-budget' || profile?.role === 'admin')
+          .map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) =>
+                clsx(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group',
+                  isActive
+                    ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800',
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon size={17} className={clsx('flex-shrink-0', isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300')} />
+                  <span className="flex-1">{label}</span>
+                  {isActive && <ChevronRight size={14} className="text-indigo-400 opacity-60" />}
+                </>
+              )}
+            </NavLink>
+          ))}
       </nav>
 
       {/* User */}
