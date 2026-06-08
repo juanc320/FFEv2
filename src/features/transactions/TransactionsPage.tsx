@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
@@ -7,7 +7,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { useActiveMonth } from '@/features/months/MonthsPage'
 import type { Transaction, Account, MonthlyExpenseItem, MonthlyIncomeItem, Category, Concept } from '@/shared/types/database'
 import { formatCOP, calc4x1000, calcEnvelopeAvailable } from '@/shared/utils/calculations'
-import { Plus, ArrowLeftRight, TrendingUp, TrendingDown, AlertTriangle, Zap, Trash2, ChevronDown, Search } from 'lucide-react'
+import { Plus, ArrowLeftRight, TrendingUp, TrendingDown, AlertTriangle, Zap, Trash2, ChevronDown, Search, ArrowLeft } from 'lucide-react'
 import clsx from 'clsx'
 import { CurrencyInput } from '@/shared/components/CurrencyInput'
 
@@ -104,6 +104,7 @@ export default function TransactionsPage() {
   const { profile } = useAuth()
   const qc = useQueryClient()
   const location = useLocation()
+  const navigate = useNavigate()
   const { data: activeMonth } = useActiveMonth()
   const { data: transactions = [], isLoading } = useTransactions()
   const { data: accounts = [] } = useAccounts()
@@ -122,6 +123,7 @@ export default function TransactionsPage() {
   const [newCategoryName, setNewCategoryName] = useState('')
   const [showNewConceptInput, setShowNewConceptInput] = useState(false)
   const [newConceptName, setNewConceptName] = useState('')
+  const [cameFromExpenses, setCameFromExpenses] = useState(false)
 
   useEffect(() => {
     window.scrollTo(0, 0)
@@ -130,6 +132,7 @@ export default function TransactionsPage() {
   useEffect(() => {
     if (location.state?.filterSearchQuery) {
       setSearchQuery(location.state.filterSearchQuery)
+      setCameFromExpenses(true)
       window.history.replaceState({}, document.title)
       window.scrollTo(0, 0)
     } else if (location.state?.prefillExpenseId) {
@@ -148,6 +151,7 @@ export default function TransactionsPage() {
         expense_item_id: !!location.state.prefillExpenseId,
         amount: !!location.state.prefillAmount,
       })
+      setCameFromExpenses(true)
       window.history.replaceState({}, document.title)
       window.scrollTo(0, 0)
     } else if (location.state?.prefillIncomeId) {
@@ -579,6 +583,15 @@ export default function TransactionsPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      {cameFromExpenses && (
+        <button 
+          onClick={() => navigate('/expenses')}
+          className="flex items-center gap-1.5 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors w-fit -mb-2 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-lg"
+        >
+          <ArrowLeft size={14} /> Volver a Plan de gastos
+        </button>
+      )}
+
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Movimientos</h1>
