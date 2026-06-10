@@ -54,14 +54,13 @@ export default function IdealBudgetPage() {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
   const { data: activeMonth, isLoading: isLoadingMonth } = useActiveMonth()
-
   const [selectedExpenses, setSelectedExpenses] = useState<Record<string, boolean>>({})
   const [selectedIncomes, setSelectedIncomes] = useState<Record<string, boolean>>({})
   const [searchQuery, setSearchQuery] = useState('')
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [activeTab, setActiveTab] = useState<'expenses' | 'incomes'>('expenses')
   const [showConfirm, setShowConfirm] = useState(false)
-
+  const [groupBy, setGroupBy] = useState<'criticality' | 'category'>('criticality')
   // Fetch all monthly expenses (both active and inactive in the month)
   const { data: expenses = [] as any[], isLoading: isLoadingExpenses } = useQuery({
     queryKey: ['simulator_expense_items', activeMonth?.id],
@@ -296,6 +295,14 @@ export default function IdealBudgetPage() {
     return acc
   }, {} as Record<string, any[]>)
 
+  // Group filtered expenses by category name
+  const uniqueCategories = Array.from(new Set(filteredExpenses.map((item: any) => item.categories?.name || 'Otros Gastos'))).sort()
+
+  const groupedByCategory = uniqueCategories.reduce((acc, catName) => {
+    acc[catName] = filteredExpenses.filter((item: any) => (item.categories?.name || 'Otros Gastos') === catName)
+    return acc
+  }, {} as Record<string, any[]>)
+
   const handleToggleAll = (checked: boolean) => {
     const newMap: Record<string, boolean> = {}
     expenses.forEach((item: any) => {
@@ -346,6 +353,74 @@ export default function IdealBudgetPage() {
       ...prev,
       [id]: prev[id] === false ? true : false
     }))
+  }
+
+  const renderExpenseCard = (item: any) => {
+    const isChecked = !!selectedExpenses[item.id]
+    const label = item.concepts?.name || item.categories?.name || 'Gasto'
+    
+    return (
+      <div
+        key={item.id}
+        onClick={() => toggleExpense(item.id)}
+        className={clsx(
+          'flex items-center gap-4 px-4 py-3 rounded-xl border transition-all cursor-pointer select-none',
+          isChecked 
+            ? 'bg-indigo-600/5 border-indigo-500/30' 
+            : 'bg-slate-900/40 border-slate-800/80 opacity-55 hover:opacity-75'
+        )}
+      >
+        {/* Custom checkbox */}
+        <div className="flex-shrink-0 text-indigo-400">
+          {isChecked ? <CheckSquare size={19} className="text-indigo-400" /> : <Square size={19} className="text-slate-600" />}
+        </div>
+
+        {/* Details */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center flex-wrap gap-2">
+            <p className="text-slate-200 text-sm font-medium leading-tight truncate">{label}</p>
+            {groupBy === 'criticality' && item.categories?.name && (
+              <span className="text-slate-500 text-[10px]">· {item.categories.name}</span>
+            )}
+            {groupBy === 'category' && (
+              <span className={clsx('text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase', CRITICALITY_COLORS[item.criticality as keyof typeof CRITICALITY_COLORS])}>
+                {CRITICALITY_LABELS[item.criticality as keyof typeof CRITICALITY_LABELS]}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <span className={clsx('text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase', TYPE_COLORS[item.expense_type as keyof typeof TYPE_COLORS])}>
+              {TYPE_LABELS[item.expense_type as keyof typeof TYPE_LABELS]}
+            </span>
+            {Number(item.arrears_amount) > 0 && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase bg-red-500/10 text-red-400 border-red-500/25">
+                Mora
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Amount */}
+        <div className="text-right flex-shrink-0 flex flex-col items-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1 bg-slate-950/40 border border-slate-850 rounded-lg px-2 py-0.5 focus-within:border-indigo-500/50 transition-colors">
+            <span className="text-slate-500 text-[10px] font-semibold">$</span>
+            <CurrencyInput
+              value={simulatedAmounts[item.id] !== undefined ? simulatedAmounts[item.id] : (Number(item.budget_amount) || 0)}
+              onChange={(val) => {
+                setSimulatedAmounts(prev => ({
+                  ...prev,
+                  [item.id]: val
+                }))
+              }}
+              className="w-20 text-right bg-transparent border-0 outline-none p-0 text-[11px] text-white font-semibold placeholder-slate-600 focus:ring-0 focus:ring-offset-0"
+            />
+          </div>
+          {Number(item.arrears_amount) > 0 && (
+            <p className="text-[10px] text-slate-500">Mora: {formatCOP(Number(item.arrears_amount))}</p>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -427,9 +502,35 @@ export default function IdealBudgetPage() {
 
           {activeTab === 'expenses' ? (
             <div className="space-y-4">
-              {/* Quick Filters Panel */}
-              <div className="card space-y-2.5 bg-slate-900/60 border-slate-800 py-3 px-4">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Acciones rápidas de simulación</span>
+              {/* Quick Filters Panel & Group By Toggle */}
+              <div className="card space-y-3 bg-slate-900/60 border-slate-800 py-3 px-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2.5 border-b border-slate-800/60">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Visualización y Acciones</span>
+                  <div className="flex items-center gap-1.5 p-0.5 bg-slate-950/60 rounded-lg border border-slate-850">
+                    <button
+                      onClick={() => setGroupBy('criticality')}
+                      className={clsx(
+                        'px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all',
+                        groupBy === 'criticality'
+                          ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
+                          : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                      )}
+                    >
+                      Por Criticidad
+                    </button>
+                    <button
+                      onClick={() => setGroupBy('category')}
+                      className={clsx(
+                        'px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all',
+                        groupBy === 'category'
+                          ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
+                          : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                      )}
+                    >
+                      Por Categoría
+                    </button>
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <button onClick={() => handleToggleAll(true)} className="btn-ghost-sm text-[10px] uppercase font-semibold text-slate-350">
                     Marcar todos
@@ -449,13 +550,13 @@ export default function IdealBudgetPage() {
                 </div>
               </div>
 
-              {/* Expense list grouped by criticality */}
+              {/* Expense list */}
               <div className="space-y-6 max-h-[65vh] overflow-y-auto pr-1">
                 {filteredExpenses.length === 0 ? (
                   <div className="card text-center py-12 border-slate-800 bg-slate-900/40">
                     <p className="text-slate-500 text-sm">No se encontraron gastos para simular.</p>
                   </div>
-                ) : (
+                ) : groupBy === 'criticality' ? (
                   criticalities.map(crit => {
                     const list = groupedExpenses[crit] || []
                     if (list.length === 0) return null
@@ -473,69 +574,26 @@ export default function IdealBudgetPage() {
                           </h3>
                         </div>
                         <div className="grid grid-cols-1 gap-2">
-                          {list.map((item: any) => {
-                            const isChecked = !!selectedExpenses[item.id]
-                            const totalAmount = Number(item.budget_amount || 0) + Number(item.arrears_amount || 0)
-                            const label = item.concepts?.name || item.categories?.name || 'Gasto'
-                            
-                            return (
-                              <div
-                                key={item.id}
-                                onClick={() => toggleExpense(item.id)}
-                                className={clsx(
-                                  'flex items-center gap-4 px-4 py-3 rounded-xl border transition-all cursor-pointer select-none',
-                                  isChecked 
-                                    ? 'bg-indigo-600/5 border-indigo-500/30' 
-                                    : 'bg-slate-900/40 border-slate-800/80 opacity-55 hover:opacity-75'
-                                )}
-                              >
-                                {/* Custom checkbox */}
-                                <div className="flex-shrink-0 text-indigo-400">
-                                  {isChecked ? <CheckSquare size={19} className="text-indigo-400" /> : <Square size={19} className="text-slate-600" />}
-                                </div>
+                          {list.map((item: any) => renderExpenseCard(item))}
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  uniqueCategories.map(catName => {
+                    const list = groupedByCategory[catName] || []
+                    if (list.length === 0) return null
 
-                                {/* Details */}
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center flex-wrap gap-2">
-                                    <p className="text-slate-200 text-sm font-medium leading-tight truncate">{label}</p>
-                                    {item.categories?.name && (
-                                      <span className="text-slate-500 text-[10px]">· {item.categories.name}</span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-1.5 mt-1.5">
-                                    <span className={clsx('text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase', TYPE_COLORS[item.expense_type as keyof typeof TYPE_COLORS])}>
-                                      {TYPE_LABELS[item.expense_type as keyof typeof TYPE_LABELS]}
-                                    </span>
-                                    {Number(item.arrears_amount) > 0 && (
-                                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase bg-red-500/10 text-red-400 border-red-500/25">
-                                        Mora
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Amount */}
-                                <div className="text-right flex-shrink-0 flex flex-col items-end gap-1" onClick={(e) => e.stopPropagation()}>
-                                  <div className="flex items-center gap-1 bg-slate-950/40 border border-slate-850 rounded-lg px-2 py-0.5 focus-within:border-indigo-500/50 transition-colors">
-                                    <span className="text-slate-500 text-[10px] font-semibold">$</span>
-                                    <CurrencyInput
-                                      value={simulatedAmounts[item.id] !== undefined ? simulatedAmounts[item.id] : (Number(item.budget_amount) || 0)}
-                                      onChange={(val) => {
-                                        setSimulatedAmounts(prev => ({
-                                          ...prev,
-                                          [item.id]: val
-                                        }))
-                                      }}
-                                      className="w-20 text-right bg-transparent border-0 outline-none p-0 text-[11px] text-white font-semibold placeholder-slate-600 focus:ring-0 focus:ring-offset-0"
-                                    />
-                                  </div>
-                                  {Number(item.arrears_amount) > 0 && (
-                                    <p className="text-[10px] text-slate-500">Mora: {formatCOP(Number(item.arrears_amount))}</p>
-                                  )}
-                                </div>
-                              </div>
-                            )
-                          })}
+                    return (
+                      <div key={catName} className="space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5 pt-2">
+                          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                            {catName} ({list.length})
+                          </h3>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2">
+                          {list.map((item: any) => renderExpenseCard(item))}
                         </div>
                       </div>
                     )
