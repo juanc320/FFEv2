@@ -20,6 +20,7 @@ import {
   Plus
 } from 'lucide-react'
 import { formatCOP } from '@/shared/utils/calculations'
+import { CurrencyInput } from '@/shared/components/CurrencyInput'
 import clsx from 'clsx'
 import type { MonthlyIncomeItem } from '@/shared/types/database'
 
@@ -90,18 +91,25 @@ export default function IdealBudgetPage() {
   })
 
   const [saveSimulationSuccess, setSaveSimulationSuccess] = useState(false)
+  const [simulatedAmounts, setSimulatedAmounts] = useState<Record<string, number>>({})
 
   // Initialize selected values from DB configuration
   useEffect(() => {
     if (expenses.length > 0) {
       const initialMap: Record<string, boolean> = {}
+      const initialAmounts: Record<string, number> = {}
       expenses.forEach((item: any) => {
         // Fallback to active_in_month if in_ideal_budget is not yet defined
         initialMap[item.id] = item.in_ideal_budget !== undefined && item.in_ideal_budget !== null
           ? item.in_ideal_budget
           : item.active_in_month
+
+        initialAmounts[item.id] = item.ideal_budget_amount !== undefined && item.ideal_budget_amount !== null
+          ? Number(item.ideal_budget_amount)
+          : Number(item.budget_amount || 0)
       })
       setSelectedExpenses(initialMap)
+      setSimulatedAmounts(initialAmounts)
     }
   }, [expenses])
 
@@ -120,9 +128,20 @@ export default function IdealBudgetPage() {
     mutationFn: async () => {
       const updates = expenses.map((item: any) => {
         const isSelected = !!selectedExpenses[item.id]
-        if (isSelected !== item.in_ideal_budget) {
+        const simulatedAmt = simulatedAmounts[item.id] !== undefined
+          ? simulatedAmounts[item.id]
+          : Number(item.budget_amount || 0)
+
+        const needsIdealUpdate = isSelected !== item.in_ideal_budget
+        const needsIdealAmtUpdate = simulatedAmt !== item.ideal_budget_amount
+
+        if (needsIdealUpdate || needsIdealAmtUpdate) {
+          const payload: any = {}
+          if (needsIdealUpdate) payload.in_ideal_budget = isSelected
+          if (needsIdealAmtUpdate) payload.ideal_budget_amount = simulatedAmt
+
           return db.from('monthly_expense_items')
-            .update({ in_ideal_budget: isSelected })
+            .update(payload)
             .eq('id', item.id)
         }
         return null
@@ -140,8 +159,8 @@ export default function IdealBudgetPage() {
     },
     onError: (err: any) => {
       const errorMsg = err.message || err
-      if (errorMsg.includes('column "in_ideal_budget" of relation "monthly_expense_items" does not exist') || errorMsg.includes('in_ideal_budget')) {
-        alert('Error: La columna "in_ideal_budget" no existe en la base de datos. Por favor, ejecuta el script SQL en supabase/add_in_ideal_budget_column.sql en tu Supabase SQL Editor para habilitar esta funcionalidad.')
+      if (errorMsg.includes('column "ideal_budget_amount" of relation "monthly_expense_items" does not exist') || errorMsg.includes('ideal_budget_amount') || errorMsg.includes('in_ideal_budget')) {
+        alert('Error: Falta alguna columna en la base de datos para soportar esta funcionalidad. Por favor, ejecuta el script SQL en supabase/add_ideal_budget_amount_column.sql en tu Supabase SQL Editor.')
       } else {
         alert('Error al guardar la simulación: ' + errorMsg)
       }
@@ -153,13 +172,21 @@ export default function IdealBudgetPage() {
     mutationFn: async () => {
       const updates = expenses.map((item: any) => {
         const isSelected = !!selectedExpenses[item.id]
+        const simulatedAmt = simulatedAmounts[item.id] !== undefined
+          ? simulatedAmounts[item.id]
+          : Number(item.budget_amount || 0)
+
         const needsActiveUpdate = isSelected !== item.active_in_month
         const needsIdealUpdate = isSelected !== item.in_ideal_budget
+        const needsAmountUpdate = simulatedAmt !== Number(item.budget_amount || 0)
+        const needsIdealAmtUpdate = simulatedAmt !== item.ideal_budget_amount
 
-        if (needsActiveUpdate || needsIdealUpdate) {
+        if (needsActiveUpdate || needsIdealUpdate || needsAmountUpdate || needsIdealAmtUpdate) {
           const payload: any = {}
           if (needsActiveUpdate) payload.active_in_month = isSelected
           if (needsIdealUpdate) payload.in_ideal_budget = isSelected
+          if (needsAmountUpdate) payload.budget_amount = simulatedAmt
+          if (needsIdealAmtUpdate) payload.ideal_budget_amount = simulatedAmt
 
           return db.from('monthly_expense_items')
             .update(payload)
@@ -182,8 +209,8 @@ export default function IdealBudgetPage() {
     },
     onError: (err: any) => {
       const errorMsg = err.message || err
-      if (errorMsg.includes('column "in_ideal_budget" of relation "monthly_expense_items" does not exist') || errorMsg.includes('in_ideal_budget')) {
-        alert('Error: La columna "in_ideal_budget" no existe en la base de datos. Por favor, ejecuta el script SQL en supabase/add_in_ideal_budget_column.sql en tu Supabase SQL Editor para habilitar esta funcionalidad.')
+      if (errorMsg.includes('column "ideal_budget_amount" of relation "monthly_expense_items" does not exist') || errorMsg.includes('ideal_budget_amount') || errorMsg.includes('in_ideal_budget')) {
+        alert('Error: Falta alguna columna en la base de datos para soportar esta funcionalidad. Por favor, ejecuta el script SQL en supabase/add_ideal_budget_amount_column.sql en tu Supabase SQL Editor.')
       } else {
         alert('Error al aplicar el presupuesto ideal: ' + errorMsg)
       }
@@ -244,7 +271,10 @@ export default function IdealBudgetPage() {
 
   const totalExpensesSimulated = expenses.reduce((sum, item) => {
     const isChecked = !!selectedExpenses[item.id]
-    return isChecked ? sum + (Number(item.budget_amount || 0) + Number(item.arrears_amount || 0)) : sum
+    const amount = simulatedAmounts[item.id] !== undefined
+      ? simulatedAmounts[item.id]
+      : Number(item.budget_amount || 0)
+    return isChecked ? sum + (amount + Number(item.arrears_amount || 0)) : sum
   }, 0)
 
   const simulatedBalance = totalIncomesSimulated - totalExpensesSimulated
@@ -485,8 +515,20 @@ export default function IdealBudgetPage() {
                                 </div>
 
                                 {/* Amount */}
-                                <div className="text-right flex-shrink-0">
-                                  <p className="text-white text-sm font-semibold">{formatCOP(totalAmount)}</p>
+                                <div className="text-right flex-shrink-0 flex flex-col items-end gap-1" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center gap-1 bg-slate-950/40 border border-slate-850 rounded-lg px-2 py-0.5 focus-within:border-indigo-500/50 transition-colors">
+                                    <span className="text-slate-500 text-[10px] font-semibold">$</span>
+                                    <CurrencyInput
+                                      value={simulatedAmounts[item.id] !== undefined ? simulatedAmounts[item.id] : (Number(item.budget_amount) || 0)}
+                                      onChange={(val) => {
+                                        setSimulatedAmounts(prev => ({
+                                          ...prev,
+                                          [item.id]: val
+                                        }))
+                                      }}
+                                      className="w-20 text-right bg-transparent border-0 outline-none p-0 text-[11px] text-white font-semibold placeholder-slate-600 focus:ring-0 focus:ring-offset-0"
+                                    />
+                                  </div>
                                   {Number(item.arrears_amount) > 0 && (
                                     <p className="text-[10px] text-slate-500">Mora: {formatCOP(Number(item.arrears_amount))}</p>
                                   )}
