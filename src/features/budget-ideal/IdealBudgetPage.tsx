@@ -116,7 +116,9 @@ export default function IdealBudgetPage() {
     if (incomes.length > 0) {
       const initialMap: Record<string, boolean> = {}
       incomes.forEach((item: MonthlyIncomeItem) => {
-        initialMap[item.id] = true // Default: include all active incomes in simulation
+        initialMap[item.id] = item.in_ideal_budget !== undefined && item.in_ideal_budget !== null
+          ? item.in_ideal_budget
+          : true // Default: include all active incomes in simulation
       })
       setSelectedIncomes(initialMap)
     }
@@ -146,12 +148,25 @@ export default function IdealBudgetPage() {
         return null
       }).filter(Boolean)
 
-      if (updates.length > 0) {
-        await Promise.all(updates)
+      const incomeUpdates = incomes.map((item: MonthlyIncomeItem) => {
+        const isSelected = selectedIncomes[item.id] !== false
+        const needsIdealUpdate = isSelected !== item.in_ideal_budget
+
+        if (needsIdealUpdate) {
+          return db.from('monthly_income_items')
+            .update({ in_ideal_budget: isSelected })
+            .eq('id', item.id)
+        }
+        return null
+      }).filter(Boolean)
+
+      if (updates.length > 0 || incomeUpdates.length > 0) {
+        await Promise.all([...updates, ...incomeUpdates])
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['simulator_expense_items'] })
+      queryClient.invalidateQueries({ queryKey: ['simulator_income_items'] })
       setSaveSimulationSuccess(true)
       window.scrollTo({ top: 0, behavior: 'smooth' })
       setTimeout(() => setSaveSimulationSuccess(false), 5000)
@@ -159,7 +174,7 @@ export default function IdealBudgetPage() {
     onError: (err: any) => {
       const errorMsg = err.message || err
       if (errorMsg.includes('column "ideal_budget_amount" of relation "monthly_expense_items" does not exist') || errorMsg.includes('ideal_budget_amount') || errorMsg.includes('in_ideal_budget')) {
-        alert('Error: Falta alguna columna en la base de datos para soportar esta funcionalidad. Por favor, ejecuta el script SQL en supabase/add_ideal_budget_amount_column.sql en tu Supabase SQL Editor.')
+        alert('Error: Falta alguna columna en la base de datos para soportar esta funcionalidad. Por favor, ejecuta los scripts SQL en supabase/add_ideal_budget_amount_column.sql y supabase/add_in_ideal_budget_to_incomes.sql en tu Supabase SQL Editor.')
       } else {
         alert('Error al guardar la simulación: ' + errorMsg)
       }
@@ -194,13 +209,26 @@ export default function IdealBudgetPage() {
         return null
       }).filter(Boolean)
 
-      if (updates.length > 0) {
-        await Promise.all(updates)
+      const incomeUpdates = incomes.map((item: MonthlyIncomeItem) => {
+        const isSelected = selectedIncomes[item.id] !== false
+        const needsIdealUpdate = isSelected !== item.in_ideal_budget
+
+        if (needsIdealUpdate) {
+          return db.from('monthly_income_items')
+            .update({ in_ideal_budget: isSelected })
+            .eq('id', item.id)
+        }
+        return null
+      }).filter(Boolean)
+
+      if (updates.length > 0 || incomeUpdates.length > 0) {
+        await Promise.all([...updates, ...incomeUpdates])
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expense_items'] })
       queryClient.invalidateQueries({ queryKey: ['simulator_expense_items'] })
+      queryClient.invalidateQueries({ queryKey: ['simulator_income_items'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       setSaveSuccess(true)
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -209,7 +237,7 @@ export default function IdealBudgetPage() {
     onError: (err: any) => {
       const errorMsg = err.message || err
       if (errorMsg.includes('column "ideal_budget_amount" of relation "monthly_expense_items" does not exist') || errorMsg.includes('ideal_budget_amount') || errorMsg.includes('in_ideal_budget')) {
-        alert('Error: Falta alguna columna en la base de datos para soportar esta funcionalidad. Por favor, ejecuta el script SQL en supabase/add_ideal_budget_amount_column.sql en tu Supabase SQL Editor.')
+        alert('Error: Falta alguna columna en la base de datos para soportar esta funcionalidad. Por favor, ejecuta los scripts SQL en supabase/add_ideal_budget_amount_column.sql y supabase/add_in_ideal_budget_to_incomes.sql en tu Supabase SQL Editor.')
       } else {
         alert('Error al aplicar el presupuesto ideal: ' + errorMsg)
       }
@@ -608,8 +636,7 @@ export default function IdealBudgetPage() {
                 <Info size={16} className="text-indigo-400 flex-shrink-0 mt-0.5" />
                 <p className="text-slate-400 text-xs leading-normal">
                   Puedes incluir o excluir fuentes de ingresos en la simulación para analizar escenarios alternativos 
-                  (por ejemplo, si un ingreso variable o un bono no llegara a recibirse). 
-                  *Nota: Toggles de ingresos solo afectan a la simulación actual y no se guardan en base de datos.*
+                  (por ejemplo, si un ingreso variable o un bono no llegara a recibirse).
                 </p>
               </div>
 
