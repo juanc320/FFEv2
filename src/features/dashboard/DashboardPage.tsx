@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { db } from '@/lib/db'
 import { useAuth } from '@/features/auth/AuthContext'
 import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, Wallet, Receipt, ArrowRightLeft, Shield, PiggyBank } from 'lucide-react'
@@ -8,12 +9,13 @@ import { syncPeriodicExpenses } from '@/shared/utils/periodicSync'
 import clsx from 'clsx'
 import type { Account, BudgetMonth, MonthlyExpenseItem, MonthlyIncomeItem, Transaction } from '@/shared/types/database'
 
-function StatCard({ label, value, sub, icon: Icon, color, id }: {
+function StatCard({ label, value, sub, icon: Icon, color, id, to, state }: {
   label: string; value: string; sub?: string;
-  icon: React.ElementType; color: string; id: string
+  icon: React.ElementType; color: string; id: string;
+  to?: string; state?: any;
 }) {
-  return (
-    <div id={id} className="card flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+  const content = (
+    <>
       <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', color)}>
         <Icon size={18} />
       </div>
@@ -22,6 +24,25 @@ function StatCard({ label, value, sub, icon: Icon, color, id }: {
         <p className="text-white text-lg font-bold mt-0.5 leading-tight truncate">{value}</p>
         {sub && <p className="text-slate-500 text-xs mt-0.5 leading-tight">{sub}</p>}
       </div>
+    </>
+  )
+
+  if (to) {
+    return (
+      <Link 
+        id={id} 
+        to={to} 
+        state={state}
+        className="card flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4 cursor-pointer hover:bg-slate-900/60 hover:border-slate-700/50 transition-all select-none"
+      >
+        {content}
+      </Link>
+    )
+  }
+
+  return (
+    <div id={id} className="card flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+      {content}
     </div>
   )
 }
@@ -305,6 +326,7 @@ export default function DashboardPage() {
           sub="En todas las cuentas"
           icon={Wallet}
           color="bg-indigo-500/15 text-indigo-400"
+          to="/accounts"
         />
         <StatCard
           id="kpiIncomePending"
@@ -321,6 +343,8 @@ export default function DashboardPage() {
           sub="Sin incluir diferidos"
           icon={Receipt}
           color="bg-amber-500/15 text-amber-400"
+          to="/expenses"
+          state={{ filterSearchQuery: 'pendiente' }}
         />
         <StatCard
           id="kpiArrears"
@@ -329,6 +353,8 @@ export default function DashboardPage() {
           sub={`Mora ${formatCOP(arrears)} · Diferido ${formatCOP(deferred)}`}
           icon={AlertTriangle}
           color="bg-red-500/15 text-red-400"
+          to="/expenses"
+          state={{ filterSearchQuery: 'pospuesto' }}
         />
       </div>
 

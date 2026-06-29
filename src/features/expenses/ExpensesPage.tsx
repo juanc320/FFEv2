@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { db } from '@/lib/db'
@@ -81,6 +81,7 @@ const EMPTY = {
 
 export default function ExpensesPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { profile } = useAuth()
   const qc = useQueryClient()
   const { data: activeMonth } = useActiveMonth()
@@ -95,6 +96,17 @@ export default function ExpensesPage() {
   const [activeTab, setActiveTab] = useState<'obligations' | 'envelopes'>(() => {
     return (localStorage.getItem('ffev2_expenses_tab') as 'obligations' | 'envelopes') || 'obligations'
   })
+
+  // Prefill search query if passed in route state (e.g. from Dashboard click)
+  useEffect(() => {
+    if (location.state?.filterSearchQuery) {
+      setSearchQuery(location.state.filterSearchQuery)
+      if (location.state.filterSearchQuery === 'pendiente') {
+        setActiveTab('obligations')
+      }
+      window.history.replaceState({}, document.title)
+    }
+  }, [location.state])
 
   // Estados para creación rápida de categorías y conceptos
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false)
