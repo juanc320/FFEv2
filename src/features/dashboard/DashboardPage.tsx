@@ -58,9 +58,21 @@ function useDashboardData() {
       
       if (month) {
         const [expRes, incRes, periodicRes] = await Promise.all([
-          db.from('monthly_expense_items').select('*, categories(name), concepts(name)').eq('month_id', month.id).eq('active_in_month', true),
-          db.from('monthly_income_items').select('*').eq('month_id', month.id),
-          db.from('periodic_expenses').select('*').eq('family_id', familyId).eq('active', true)
+          db.from('monthly_expense_items')
+            .select('*, categories(name), concepts(name)')
+            .eq('month_id', month.id)
+            .eq('active_in_month', true)
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true }),
+          db.from('monthly_income_items')
+            .select('*')
+            .eq('month_id', month.id),
+          db.from('periodic_expenses')
+            .select('*')
+            .eq('family_id', familyId)
+            .eq('active', true)
+            .order('created_at', { ascending: true })
+            .order('id', { ascending: true })
         ])
         expenses = expRes.data || []
         incomes = incRes.data || []
@@ -83,7 +95,13 @@ function useDashboardData() {
           periodicByConcept[p.concept_id].push(p)
         }
 
-        const sporadicItems = expenses.filter(item => item.expense_type === 'sporadic')
+        const sporadicItems = expenses
+          .filter(item => item.expense_type === 'sporadic')
+          .sort((a, b) => {
+            const dateCompare = (a.created_at || '').localeCompare(b.created_at || '')
+            if (dateCompare !== 0) return dateCompare
+            return (a.id || '').localeCompare(b.id || '')
+          })
         const existingByConcept: Record<string, any[]> = {}
         for (const item of sporadicItems) {
           if (!existingByConcept[item.concept_id]) existingByConcept[item.concept_id] = []

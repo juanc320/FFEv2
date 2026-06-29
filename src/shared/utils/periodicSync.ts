@@ -48,6 +48,8 @@ export async function syncPeriodicExpenses(familyId: string) {
     .select('*')
     .eq('family_id', familyId)
     .eq('active', true)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
 
   if (periodicErr || !periodicItems) return
 
@@ -57,6 +59,8 @@ export async function syncPeriodicExpenses(familyId: string) {
     .select('*')
     .eq('month_id', activeMonth.id)
     .eq('expense_type', 'sporadic')
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
 
   if (itemsErr || !existingItems) return
 
@@ -183,6 +187,8 @@ export async function syncPeriodicIncomes(familyId: string) {
     .select('*')
     .eq('family_id', familyId)
     .eq('active', true)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
 
   if (periodicErr) {
     console.error('Error fetching periodic incomes in syncPeriodicIncomes:', periodicErr)
@@ -196,6 +202,8 @@ export async function syncPeriodicIncomes(familyId: string) {
     .select('*')
     .eq('month_id', activeMonth.id)
     .eq('income_type', 'sporadic')
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
 
   if (itemsErr) {
     console.error('Error fetching existing sporadic monthly incomes in syncPeriodicIncomes:', itemsErr)

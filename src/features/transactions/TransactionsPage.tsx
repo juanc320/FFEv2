@@ -91,7 +91,13 @@ function usePeriodicExpenses() {
   return useQuery({
     queryKey: ['periodic_expenses', profile?.family_id],
     queryFn: async (): Promise<any[]> => {
-      const { data } = await supabase.from('periodic_expenses').select('*').eq('family_id', profile!.family_id!).eq('active', true)
+      const { data } = await supabase
+        .from('periodic_expenses')
+        .select('*')
+        .eq('family_id', profile!.family_id!)
+        .eq('active', true)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
       return data ?? []
     },
     enabled: !!profile?.family_id,
@@ -156,7 +162,13 @@ export default function TransactionsPage() {
       periodicByConcept[p.concept_id].push(p)
     }
 
-    const sporadicItems = expenseItems.filter(item => item.expense_type === 'sporadic')
+    const sporadicItems = expenseItems
+      .filter(item => item.expense_type === 'sporadic')
+      .sort((a, b) => {
+        const dateCompare = (a.created_at || '').localeCompare(b.created_at || '')
+        if (dateCompare !== 0) return dateCompare
+        return (a.id || '').localeCompare(b.id || '')
+      })
     const existingByConcept: Record<string, any[]> = {}
     for (const item of sporadicItems) {
       if (!existingByConcept[item.concept_id]) existingByConcept[item.concept_id] = []

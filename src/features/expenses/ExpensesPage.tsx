@@ -149,6 +149,8 @@ export default function ExpensesPage() {
         .select('*')
         .eq('family_id', profile!.family_id!)
         .eq('active', true)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
       return (data ?? []) as any[]
     },
     enabled: !!profile?.family_id,
@@ -172,7 +174,13 @@ export default function ExpensesPage() {
       periodicByConcept[p.concept_id].push(p)
     }
 
-    const sporadicItems = items.filter(item => item.expense_type === 'sporadic')
+    const sporadicItems = items
+      .filter(item => item.expense_type === 'sporadic')
+      .sort((a, b) => {
+        const dateCompare = (a.created_at || '').localeCompare(b.created_at || '')
+        if (dateCompare !== 0) return dateCompare
+        return (a.id || '').localeCompare(b.id || '')
+      })
     const existingByConcept: Record<string, any[]> = {}
     for (const item of sporadicItems) {
       if (!existingByConcept[item.concept_id]) existingByConcept[item.concept_id] = []
@@ -266,41 +274,57 @@ export default function ExpensesPage() {
 
   const deleteItem = useMutation({
     mutationFn: async (id: string) => {
-      await db.from('monthly_expense_items').delete().eq('id', id)
+      const { error } = await db.from('monthly_expense_items').delete().eq('id', id)
+      if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
+    onError: (err: any) => {
+      alert('Error al eliminar el gasto: ' + (err.message || err))
+    }
   })
 
   const updateItem = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<MonthlyExpenseItem> }) => {
-      await db.from('monthly_expense_items').update(data).eq('id', id)
+      const { error } = await db.from('monthly_expense_items').update(data).eq('id', id)
+      if (error) throw error
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expense_items'] })
       setEditingId(null)
       setEditForm(null)
     },
+    onError: (err: any) => {
+      alert('Error al actualizar el gasto: ' + (err.message || err))
+    }
   })
 
   const postponeItem = useMutation({
     mutationFn: async (item: MonthlyExpenseItem) => {
       const pending = Math.max(0, (item.budget_amount + item.arrears_amount) - item.executed_amount_cached)
-      await db.from('monthly_expense_items').update({ 
+      const { error } = await db.from('monthly_expense_items').update({ 
         postponed: true,
         deferred_amount: pending  
       }).eq('id', item.id)
+      if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
+    onError: (err: any) => {
+      alert('Error al posponer el gasto: ' + (err.message || err))
+    }
   })
 
   const unpostponeItem = useMutation({
     mutationFn: async (item: MonthlyExpenseItem) => {
-      await db.from('monthly_expense_items').update({ 
+      const { error } = await db.from('monthly_expense_items').update({ 
         postponed: false,
         deferred_amount: 0  
       }).eq('id', item.id)
+      if (error) throw error
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['expense_items'] }),
+    onError: (err: any) => {
+      alert('Error al reanudar el gasto: ' + (err.message || err))
+    }
   })
 
   // Filter items based on search query

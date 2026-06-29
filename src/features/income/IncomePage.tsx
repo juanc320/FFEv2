@@ -151,7 +151,8 @@ export default function IncomePage() {
         .select('*')
         .eq('family_id', profile!.family_id!)
         .eq('active', true)
-        .order('amount', { ascending: false })
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
       if (error) throw error
       return (data ?? []) as any[]
     },
@@ -198,7 +199,13 @@ export default function IncomePage() {
       periodicByGroup[key].push(p)
     }
 
-    const sporadicItems = items.filter(item => item.income_type === 'sporadic')
+    const sporadicItems = items
+      .filter(item => item.income_type === 'sporadic')
+      .sort((a, b) => {
+        const dateCompare = (a.created_at || '').localeCompare(b.created_at || '')
+        if (dateCompare !== 0) return dateCompare
+        return (a.id || '').localeCompare(b.id || '')
+      })
     const existingByGroup: Record<string, any[]> = {}
     for (const item of sporadicItems) {
       const key = item.concept_id || `label:${item.label}`
