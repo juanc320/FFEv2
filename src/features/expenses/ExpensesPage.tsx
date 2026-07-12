@@ -43,10 +43,11 @@ function getStatusTag(item: MonthlyExpenseItem) {
     if (available === 0) return { label: 'Agotado', color: 'text-amber-400 border-amber-500/30 bg-amber-500/10' }
     return { label: 'Disponible', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' }
   } else {
-    // Obligations (fixed and sporadic): pure binary paid/pending/postponed/no_apply
+    // Obligations (fixed and sporadic): paid/partial/pending/postponed/no_apply
     if (totalDue === 0) return { label: 'No aplica', color: 'text-slate-400 border-slate-700/50 bg-slate-800/40' }
     if (item.postponed) return { label: 'Pospuesto', color: 'text-slate-400 border-slate-700/50 bg-slate-800/60' }
     if (executed >= totalDue) return { label: 'Pagado', color: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' }
+    if (executed > 0) return { label: 'Parcial', color: 'text-blue-400 border-blue-500/30 bg-blue-500/10' }
     return { label: 'Pendiente', color: 'text-orange-400 border-orange-500/30 bg-orange-500/10' }
   }
 }
