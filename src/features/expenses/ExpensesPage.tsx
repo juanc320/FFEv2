@@ -91,6 +91,9 @@ export default function ExpensesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [showZeroItems, setShowZeroItems] = useState(false)
   const [searchQuery, setSearchQuery] = useState<string>('')
+  const [groupBy, setGroupBy] = useState<'category' | 'date'>(() => {
+    return (localStorage.getItem('ffev2_expenses_groupby') as 'category' | 'date') || 'category'
+  })
   
   // Tab state: 'obligations' (fixed & sporadic) or 'envelopes' (variable)
   const [activeTab, setActiveTab] = useState<'obligations' | 'envelopes'>(() => {
@@ -140,6 +143,10 @@ export default function ExpensesPage() {
   useEffect(() => {
     localStorage.setItem('ffev2_expenses_tab', activeTab)
   }, [activeTab])
+
+  useEffect(() => {
+    localStorage.setItem('ffev2_expenses_groupby', groupBy)
+  }, [groupBy])
 
   // Categories + Concepts
   const { data: categories = [] } = useQuery({
@@ -434,23 +441,58 @@ export default function ExpensesPage() {
     return envelopesItems.filter(i => (i.budget_amount + i.arrears_amount) === 0)
   }, [envelopesItems])
 
-  // Group items by category for rendering in folders
+  // Group items by category or by date for rendering in folders/sections
   const obligationsGroups = useMemo(() => {
-    const sortByDate = (a: MonthlyExpenseItem, b: MonthlyExpenseItem) => {
-      if (!a.due_date && !b.due_date) return 0
-      if (!a.due_date) return 1
-      if (!b.due_date) return -1
-      return a.due_date.localeCompare(b.due_date)
-    }
-
     const activeObligations = obligationsItems.filter(i => (i.budget_amount + i.arrears_amount) > 0)
 
-    return categories.map(cat => ({
-      id: cat.id,
-      label: cat.name,
-      items: activeObligations.filter(i => i.category_id === cat.id).sort(sortByDate)
-    })).filter(g => g.items.length > 0)
-  }, [obligationsItems, categories])
+    if (groupBy === 'date') {
+      const groupsMap: Record<string, MonthlyExpenseItem[]> = {}
+      for (const item of activeObligations) {
+        const dateKey = item.due_date || 'no_date'
+        if (!groupsMap[dateKey]) {
+          groupsMap[dateKey] = []
+        }
+        groupsMap[dateKey].push(item)
+      }
+
+      // Sort date keys ascending, 'no_date' at the end
+      const sortedKeys = Object.keys(groupsMap).sort((a, b) => {
+        if (a === 'no_date') return 1
+        if (b === 'no_date') return -1
+        return a.localeCompare(b)
+      })
+
+      return sortedKeys.map(key => {
+        let label = ''
+        if (key === 'no_date') {
+          label = 'Sin fecha de pago'
+        } else {
+          const [year, month, day] = key.split('-')
+          const date = new Date(Number(year), Number(month) - 1, Number(day))
+          const formatted = date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
+          label = formatted.charAt(0).toUpperCase() + formatted.slice(1)
+        }
+        return {
+          id: key,
+          label,
+          items: groupsMap[key]
+        }
+      })
+    } else {
+      const sortByDate = (a: MonthlyExpenseItem, b: MonthlyExpenseItem) => {
+        if (!a.due_date && !b.due_date) return 0
+        if (!a.due_date) return 1
+        if (!b.due_date) return -1
+        return a.due_date.localeCompare(b.due_date)
+      }
+
+      return categories.map(cat => ({
+        id: cat.id,
+        label: cat.name,
+        items: activeObligations.filter(i => i.category_id === cat.id).sort(sortByDate)
+      })).filter(g => g.items.length > 0)
+    }
+  }, [obligationsItems, categories, groupBy])
 
   const envelopesGroups = useMemo(() => {
     const activeEnvelopes = envelopesItems.filter(i => (i.budget_amount + i.arrears_amount) > 0)
@@ -558,16 +600,47 @@ export default function ExpensesPage() {
         </button>
       </div>
 
-      {/* Search Bar */}
-      <div className="relative mt-4">
-        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-        <input 
-          type="text"
-          placeholder={activeTab === 'obligations' ? "Buscar obligación por concepto, categoría, estado o valor..." : "Buscar bolsillo por concepto, categoría, estado o valor..."}
-          className="input pl-10 pr-4 py-2 w-full bg-slate-800/50 border-slate-750 text-white placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-all"
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-        />
+      {/* Search Bar and Group Selector */}
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center mt-4">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input 
+            type="text"
+            placeholder={activeTab === 'obligations' ? "Buscar obligación por concepto, categoría, estado o valor..." : "Buscar bolsillo por concepto, categoría, estado o valor..."}
+            className="input pl-10 pr-4 py-2 w-full bg-slate-800/50 border-slate-750 text-white placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-all"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+        </div>
+        
+        {activeTab === 'obligations' && (
+          <div className="flex items-center gap-1 bg-slate-900/40 p-1 rounded-xl border border-slate-800 self-start sm:self-auto flex-shrink-0">
+            <button
+              onClick={() => setGroupBy('category')}
+              className={clsx(
+                'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5',
+                groupBy === 'category'
+                  ? 'bg-indigo-650 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              )}
+            >
+              <Tag size={12} />
+              Categoría
+            </button>
+            <button
+              onClick={() => setGroupBy('date')}
+              className={clsx(
+                'px-3 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5',
+                groupBy === 'date'
+                  ? 'bg-indigo-650 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              )}
+            >
+              <Calendar size={12} />
+              Fecha de pago
+            </button>
+          </div>
+        )}
       </div>
 
       {/* KPIs Display */}
@@ -768,7 +841,11 @@ export default function ExpensesPage() {
         obligationsGroups.map(group => (
           <div key={group.id} className="space-y-3 mt-4">
             <h3 className="text-xs font-semibold uppercase tracking-widest px-1 text-slate-400 border-b border-slate-800 pb-1 flex items-center gap-1.5">
-              <Tag size={12} className="opacity-70" />
+              {groupBy === 'date' ? (
+                <Calendar size={12} className="opacity-70" />
+              ) : (
+                <Tag size={12} className="opacity-70" />
+              )}
               {group.label}
             </h3>
             {group.items.map(item => {
@@ -813,6 +890,11 @@ export default function ExpensesPage() {
                         <span className={clsx('text-[10px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider', tag.color)}>
                           {tag.label}
                         </span>
+                        {groupBy === 'date' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded border font-medium uppercase tracking-wider bg-slate-800 border-slate-700 text-slate-400">
+                            {categories.find(c => c.id === item.category_id)?.name || 'Sin categoría'}
+                          </span>
+                        )}
                         {item.arrears_amount > 0 && executed < item.arrears_amount && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded border font-bold uppercase tracking-wider bg-red-500/10 text-red-400 border-red-500/20">
                             Mora: {formatCOP(item.arrears_amount)}
