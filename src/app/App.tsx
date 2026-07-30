@@ -17,6 +17,7 @@ import FamilyPage from '@/features/family/FamilyPage'
 import ImportPage from '@/features/import/ImportPage'
 import PeriodicExpensesPage from '@/features/periodic/PeriodicExpensesPage'
 import IdealBudgetPage from '@/features/budget-ideal/IdealBudgetPage'
+import PaymentPlanCopyPage from '@/features/expenses/PaymentPlanCopyPage'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -43,17 +44,18 @@ export default function App() {
               }
             >
               <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard"    element={<DashboardPage />} />
-              <Route path="months"       element={<MonthsPage />} />
-              <Route path="accounts"     element={<AccountsPage />} />
-              <Route path="transactions" element={<TransactionsPage />} />
-              <Route path="expenses"     element={<ExpensesPage />} />
-              <Route path="income"       element={<IncomePage />} />
-              <Route path="categories"   element={<CategoriesPage />} />
-              <Route path="family"       element={<FamilyPage />} />
-              <Route path="import"       element={<ImportPage />} />
-              <Route path="periodic"     element={<PeriodicExpensesPage />} />
-              <Route path="ideal-budget" element={<IdealBudgetPage />} />
+              <Route path="dashboard"        element={<DashboardPage />} />
+              <Route path="months"           element={<MonthsPage />} />
+              <Route path="accounts"         element={<AccountsPage />} />
+              <Route path="transactions"     element={<TransactionsPage />} />
+              <Route path="expenses"         element={<ExpensesPage />} />
+              <Route path="copia-plan-pagos" element={<PaymentPlanCopyPage />} />
+              <Route path="income"           element={<IncomePage />} />
+              <Route path="categories"       element={<CategoriesPage />} />
+              <Route path="family"           element={<FamilyPage />} />
+              <Route path="import"           element={<ImportPage />} />
+              <Route path="periodic"         element={<PeriodicExpensesPage />} />
+              <Route path="ideal-budget"     element={<IdealBudgetPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

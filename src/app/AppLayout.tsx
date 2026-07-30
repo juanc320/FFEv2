@@ -17,6 +17,7 @@ import {
   TrendingUp,
   RefreshCw,
   SlidersHorizontal,
+  CreditCard,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -26,6 +27,7 @@ const navItems = [
   { to: '/transactions', icon: ArrowLeftRight, label: 'Movimientos', description: 'Transacciones' },
   { to: '/accounts',  icon: Wallet,           label: 'Cuentas',     description: 'Cuentas y bolsillos' },
   { to: '/expenses',  icon: Receipt,    label: 'Plan de gastos',    description: 'Gastos del mes' },
+  { to: '/copia-plan-pagos', icon: CreditCard, label: 'Copia Plan de Pagos', description: 'Obligaciones v2' },
   { to: '/periodic',  icon: RefreshCw,  label: 'Gastos periódicos', description: 'Trimestrales, anuales' },
   { to: '/ideal-budget', icon: SlidersHorizontal, label: 'Presupuesto Ideal', description: 'Simulador estratégico' },
   { to: '/income',    icon: TrendingUp, label: 'Ingresos',          description: 'Ingresos esperados' },
