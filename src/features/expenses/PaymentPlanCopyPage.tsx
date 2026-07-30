@@ -331,8 +331,8 @@ export default function PaymentPlanCopyPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-24 lg:pb-10">
-      {/* Centered container: px-2 en móvil para reducir márgenes innecesarios */}
-      <div className="max-w-3xl mx-auto px-2 sm:px-4 pt-2 sm:pt-4 space-y-3">
+      {/* Ultra-compact container: px-1 en móvil para máxima área útil casi borde a borde */}
+      <div className="max-w-3xl mx-auto px-1 sm:px-3 pt-1.5 sm:pt-3 space-y-2.5">
         
         {/* 1. Segmented Control / Toggle Pills (Obligaciones vs. Sobres) */}
         <div className="bg-slate-900/90 p-1 rounded-xl border border-slate-800 flex gap-1 shadow-md backdrop-blur-md">
@@ -342,7 +342,7 @@ export default function PaymentPlanCopyPage() {
               setExpandedId(null)
             }}
             className={clsx(
-              'flex-1 py-2.5 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5',
+              'flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5',
               activeTab === 'obligations'
                 ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/50',
@@ -357,7 +357,7 @@ export default function PaymentPlanCopyPage() {
               setExpandedId(null)
             }}
             className={clsx(
-              'flex-1 py-2.5 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5',
+              'flex-1 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-1.5',
               activeTab === 'envelopes'
                 ? 'bg-gradient-to-r from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/50',
@@ -369,59 +369,59 @@ export default function PaymentPlanCopyPage() {
         </div>
 
         {/* 2. Filters & Search Bar */}
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {/* Search box */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={15} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Buscar obligación o categoría..."
-              className="w-full bg-slate-900/80 border border-slate-800 text-white rounded-xl pl-9 pr-8 py-2 text-xs sm:text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+              className="w-full bg-slate-900/80 border border-slate-800 text-white rounded-xl pl-8 pr-7 py-1.5 text-xs sm:text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
               >
-                <X size={14} />
+                <X size={13} />
               </button>
             )}
           </div>
 
           {/* Quick Filter Chips (Category & Date/Status) */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
             {/* Category Filter Button */}
             <button
               onClick={() => setActiveBottomSheet('category')}
               className={clsx(
-                'flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex-shrink-0',
+                'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium border transition-colors flex-shrink-0',
                 selectedCategory !== 'all'
                   ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/50'
                   : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white',
               )}
             >
-              <TagIcon size={13} />
+              <TagIcon size={12} />
               <span>
                 {selectedCategory === 'all'
                   ? 'Categoría'
                   : categoryMap.get(selectedCategory)?.name || 'Categoría'}
               </span>
-              <ChevronDown size={13} className="opacity-70" />
+              <ChevronDown size={12} className="opacity-70" />
             </button>
 
             {/* Status / Date Filter Button */}
             <button
               onClick={() => setActiveBottomSheet('status')}
               className={clsx(
-                'flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors flex-shrink-0',
+                'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium border transition-colors flex-shrink-0',
                 selectedStatus !== 'all'
                   ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/50'
                   : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white',
               )}
             >
-              <CalendarIcon size={13} />
+              <CalendarIcon size={12} />
               <span>
                 {selectedStatus === 'all'
                   ? 'Estado'
@@ -431,7 +431,7 @@ export default function PaymentPlanCopyPage() {
                   ? '🟡 Parcial'
                   : '🟢 Pagada'}
               </span>
-              <ChevronDown size={13} className="opacity-70" />
+              <ChevronDown size={12} className="opacity-70" />
             </button>
 
             {/* Reset Filters button if active */}
@@ -442,9 +442,9 @@ export default function PaymentPlanCopyPage() {
                   setSelectedStatus('all')
                   setSearchQuery('')
                 }}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition-colors flex-shrink-0"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition-colors flex-shrink-0"
               >
-                <X size={12} />
+                <X size={11} />
                 <span>Limpiar</span>
               </button>
             )}
@@ -454,12 +454,12 @@ export default function PaymentPlanCopyPage() {
         {/* 3. Obligation Cards List */}
         {isLoading ? (
           <div className="py-8 text-center text-slate-500 space-y-2">
-            <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
             <p className="text-xs">Cargando compromisos del mes...</p>
           </div>
         ) : filteredItems.length === 0 ? (
-          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 text-center space-y-2">
-            <Receipt className="w-8 h-8 text-slate-600 mx-auto" />
+          <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 text-center space-y-2">
+            <Receipt className="w-7 h-7 text-slate-600 mx-auto" />
             <p className="text-white font-medium text-xs sm:text-sm">No se encontraron compromisos</p>
             <p className="text-slate-400 text-[11px] max-w-sm mx-auto">
               {searchQuery || selectedCategory !== 'all' || selectedStatus !== 'all'
@@ -484,74 +484,74 @@ export default function PaymentPlanCopyPage() {
                 <div
                   key={item.id}
                   className={clsx(
-                    'bg-slate-900/90 border rounded-xl transition-all duration-200 overflow-hidden shadow-sm',
+                    'bg-slate-900/90 border rounded-xl transition-all duration-200 overflow-hidden shadow-xs',
                     isExpanded ? 'border-indigo-500/50 ring-1 ring-indigo-500/30' : 'border-slate-800/80 hover:border-slate-700',
                     status.key === 'paid' && !isExpanded && 'opacity-75',
                   )}
                 >
-                  {/* Collapsed Header View: Padding compacto p-3 sm:p-4 */}
+                  {/* Collapsed Header View: Padding ultra compacto px-2.5 py-2.5 */}
                   <div
                     onClick={() => handleCardToggle(item)}
-                    className="p-3 sm:p-4 cursor-pointer space-y-2.5 select-none"
+                    className="px-2.5 py-2.5 sm:px-3.5 sm:py-3 cursor-pointer space-y-2 select-none"
                   >
                     {/* Top Row: Icon + Full Title (en 2 renglones si es largo) + Status Badge */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                        <div className="w-8 h-8 rounded-lg bg-slate-800/80 border border-slate-700/80 flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <CreditCard className="w-4 h-4 text-indigo-400" />
+                    <div className="flex items-start justify-between gap-1.5">
+                      <div className="flex items-start gap-2 min-w-0 flex-1">
+                        <div className="w-7 h-7 rounded-lg bg-slate-800/80 border border-slate-700/80 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          {/* NOMBRE COMPLETO SIN TRUNCAR (Tipografía limpia text-sm) */}
-                          <h3 className="text-white font-semibold text-sm leading-tight break-words whitespace-normal">
+                          {/* NOMBRE COMPLETO SIN TRUNCAR */}
+                          <h3 className="text-white font-semibold text-xs sm:text-sm leading-tight break-words whitespace-normal">
                             {title}
                           </h3>
-                          <p className="text-slate-400 text-[11px] mt-0.5 flex items-center gap-1.5 flex-wrap">
+                          <p className="text-slate-400 text-[10px] sm:text-[11px] mt-0.5 flex items-center gap-1 flex-wrap">
                             <span>{categoryObj?.name}</span>
                             <span>•</span>
-                            <span className="text-slate-400 flex items-center gap-1">
-                              <Clock size={11} className="text-slate-500" />
+                            <span className="text-slate-400 flex items-center gap-0.5">
+                              <Clock size={10} className="text-slate-500" />
                               {item.due_date ? `Vence: ${item.due_date}` : 'Sin fecha'}
                             </span>
                           </p>
                         </div>
                       </div>
 
-                      {/* Badge de Estado Compacto */}
-                      <span className={clsx('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium border flex-shrink-0', status.badgeBg)}>
-                        <span className={clsx('w-1.5 h-1.5 rounded-full', status.dotColor)} />
+                      {/* Badge de Estado Ultra-Compacto */}
+                      <span className={clsx('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border flex-shrink-0', status.badgeBg)}>
+                        <span className={clsx('w-1 h-1 rounded-full', status.dotColor)} />
                         <span className={status.textColor}>{status.label}</span>
                       </span>
                     </div>
 
                     {/* Bottom Row: Pendiente por pagar + Botón Pagar Total directo + Chevron Toggle */}
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
                       <div>
                         <p className="text-slate-400 text-[10px]">Pendiente por pagar</p>
-                        <p className="text-white font-bold text-base tracking-tight">{formatCOP(remaining)}</p>
+                        <p className="text-white font-bold text-sm sm:text-base tracking-tight">{formatCOP(remaining)}</p>
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1">
                         {/* Botón directo de Pagar Total (1-tap sin necesidad de desplegar) */}
                         {remaining > 0 ? (
                           <button
                             type="button"
                             disabled={isItemSubmitting}
                             onClick={e => handleDirectFullPayment(e, item)}
-                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-sm shadow-indigo-600/30 flex items-center gap-1 transition-all"
+                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-[11px] px-2.5 py-1 rounded-lg shadow-xs shadow-indigo-600/30 flex items-center gap-1 transition-all"
                             title="Marcar Pago Total directamente"
                           >
                             <span>{isItemSubmitting ? 'Pagando...' : 'Pagar Total'}</span>
-                            <ArrowUpRight size={14} />
+                            <ArrowUpRight size={13} />
                           </button>
                         ) : (
-                          <span className="text-emerald-400 text-[11px] font-medium flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-lg">
-                            <CheckCircle2 size={13} /> Pagada
+                          <span className="text-emerald-400 text-[10px] font-medium flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                            <CheckCircle2 size={12} /> Pagada
                           </span>
                         )}
 
                         {/* Chevron toggle para ver u ocultar formulario parcial */}
                         <div className="text-slate-400 hover:text-white p-1 rounded-md bg-slate-800/40">
-                          {isExpanded ? <ChevronUp size={16} className="text-indigo-400" /> : <ChevronDown size={16} />}
+                          {isExpanded ? <ChevronUp size={15} className="text-indigo-400" /> : <ChevronDown size={15} />}
                         </div>
                       </div>
                     </div>
@@ -559,9 +559,9 @@ export default function PaymentPlanCopyPage() {
 
                   {/* Inline Expanded Details (Accordion Inline) */}
                   {isExpanded && (
-                    <div className="border-t border-slate-800 bg-slate-900/95 p-3 sm:p-4 space-y-3 animate-fadeIn">
+                    <div className="border-t border-slate-800 bg-slate-900/95 p-2.5 sm:p-3.5 space-y-2.5 animate-fadeIn">
                       {/* Cifras de Transparencia */}
-                      <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80 text-[11px]">
+                      <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800/80 text-[10px] sm:text-[11px]">
                         <div>
                           <p className="text-slate-400">Valor inicial (presupuesto):</p>
                           <p className="text-slate-200 font-semibold mt-0.5">{formatCOP(totalDue)}</p>
@@ -576,26 +576,26 @@ export default function PaymentPlanCopyPage() {
                       {actionMessage && (
                         <div
                           className={clsx(
-                            'p-2.5 rounded-lg text-xs flex items-center gap-2 border',
+                            'p-2 rounded-lg text-[11px] flex items-center gap-1.5 border',
                             actionMessage.type === 'success'
                               ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
                               : 'bg-rose-500/10 border-rose-500/30 text-rose-400',
                           )}
                         >
-                          {actionMessage.type === 'success' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+                          {actionMessage.type === 'success' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
                           <span>{actionMessage.text}</span>
                         </div>
                       )}
 
                       {remaining <= 0 ? (
-                        <div className="bg-emerald-500/10 border border-emerald-500/30 p-2.5 rounded-lg text-emerald-400 text-xs font-medium flex items-center justify-center gap-2">
-                          <CheckCircle2 size={15} />
+                        <div className="bg-emerald-500/10 border border-emerald-500/30 p-2 rounded-lg text-emerald-400 text-[11px] font-medium flex items-center justify-center gap-1.5">
+                          <CheckCircle2 size={14} />
                           <span>Esta obligación ya ha sido pagada completamente.</span>
                         </div>
                       ) : (
-                        <div className="space-y-2.5">
+                        <div className="space-y-2">
                           {/* Payment mode radio selection */}
-                          <div className="flex gap-3 text-xs">
+                          <div className="flex gap-3 text-[11px]">
                             <label className="flex items-center gap-1.5 cursor-pointer text-slate-300">
                               <input
                                 type="radio"
@@ -618,16 +618,16 @@ export default function PaymentPlanCopyPage() {
                                 onChange={() => setPayAmountMode('custom')}
                                 className="accent-indigo-500"
                               />
-                              <span>Otro Valor / Abono Parcial</span>
+                              <span>Otro Valor / Abono</span>
                             </label>
                           </div>
 
                           {/* Custom Amount Input & Quick Fill */}
                           <div>
-                            <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                            <label className="block text-[10px] font-medium text-slate-400 mb-0.5">
                               Monto a abonar (COP)
                             </label>
-                            <div className="flex gap-2">
+                            <div className="flex gap-1.5">
                               <div className="flex-1">
                                 <CurrencyInput
                                   value={payAmountMode === 'full' ? remaining : payCustomAmount}
@@ -635,7 +635,7 @@ export default function PaymentPlanCopyPage() {
                                     setPayAmountMode('custom')
                                     setPayCustomAmount(val)
                                   }}
-                                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                 />
                               </div>
                               <button
@@ -644,7 +644,7 @@ export default function PaymentPlanCopyPage() {
                                   setPayAmountMode('full')
                                   setPayCustomAmount(remaining)
                                 }}
-                                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition-colors flex-shrink-0"
+                                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium rounded-lg border border-slate-700 transition-colors flex-shrink-0"
                               >
                                 Rellenar Total
                               </button>
@@ -653,13 +653,13 @@ export default function PaymentPlanCopyPage() {
 
                           {/* Account selector */}
                           <div>
-                            <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                            <label className="block text-[10px] font-medium text-slate-400 mb-0.5">
                               Pagar desde la cuenta:
                             </label>
                             <select
                               value={selectedAccountId}
                               onChange={e => setSelectedAccountId(e.target.value)}
-                              className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             >
                               {accounts.map(acc => (
                                 <option key={acc.id} value={acc.id}>
@@ -672,11 +672,11 @@ export default function PaymentPlanCopyPage() {
                       )}
 
                       {/* Action buttons */}
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-800">
                         <button
                           type="button"
                           onClick={() => setExpandedId(null)}
-                          className="text-xs text-slate-400 hover:text-white font-medium px-2.5 py-1.5 rounded-lg transition-colors"
+                          className="text-[11px] text-slate-400 hover:text-white font-medium px-2 py-1 rounded-lg transition-colors"
                         >
                           Cerrar Detalles
                         </button>
@@ -686,10 +686,10 @@ export default function PaymentPlanCopyPage() {
                             type="button"
                             disabled={isSubmitting}
                             onClick={() => handleConfirmPayment(item)}
-                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow-md shadow-indigo-600/30 flex items-center gap-1.5 transition-all"
+                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-md shadow-indigo-600/30 flex items-center gap-1 transition-all"
                           >
                             <span>{isSubmitting ? 'Procesando...' : 'Confirmar Pago'}</span>
-                            <Check size={14} />
+                            <Check size={13} />
                           </button>
                         )}
                       </div>
@@ -712,18 +712,18 @@ export default function PaymentPlanCopyPage() {
           />
 
           {/* Sheet Container */}
-          <div className="relative w-full max-w-lg bg-slate-900 border-t border-slate-800 rounded-t-3xl p-5 shadow-2xl z-10 space-y-3 animate-slideUp">
+          <div className="relative w-full max-w-lg bg-slate-900 border-t border-slate-800 rounded-t-3xl p-4 shadow-2xl z-10 space-y-3 animate-slideUp">
             <div className="w-10 h-1 bg-slate-700 rounded-full mx-auto" />
 
             <div className="flex items-center justify-between">
-              <h3 className="text-white font-bold text-base">
+              <h3 className="text-white font-bold text-sm sm:text-base">
                 {activeBottomSheet === 'category' ? 'Filtrar por Categoría' : 'Filtrar por Estado'}
               </h3>
               <button
                 onClick={() => setActiveBottomSheet(null)}
                 className="text-slate-400 hover:text-white p-1 rounded-lg"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
@@ -736,14 +736,14 @@ export default function PaymentPlanCopyPage() {
                     setActiveBottomSheet(null)
                   }}
                   className={clsx(
-                    'w-full text-left px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center justify-between',
+                    'w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-between',
                     selectedCategory === 'all'
                       ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40'
                       : 'bg-slate-800/50 text-slate-300 hover:bg-slate-800',
                   )}
                 >
                   <span>Todas las categorías</span>
-                  {selectedCategory === 'all' && <Check size={15} />}
+                  {selectedCategory === 'all' && <Check size={14} />}
                 </button>
 
                 {categories.map(cat => (
@@ -754,14 +754,14 @@ export default function PaymentPlanCopyPage() {
                       setActiveBottomSheet(null)
                     }}
                     className={clsx(
-                      'w-full text-left px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center justify-between',
+                      'w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-between',
                       selectedCategory === cat.id
                         ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40'
                         : 'bg-slate-800/50 text-slate-300 hover:bg-slate-800',
                     )}
                   >
                     <span>{cat.name}</span>
-                    {selectedCategory === cat.id && <Check size={15} />}
+                    {selectedCategory === cat.id && <Check size={14} />}
                   </button>
                 ))}
               </div>
@@ -783,14 +783,14 @@ export default function PaymentPlanCopyPage() {
                       setActiveBottomSheet(null)
                     }}
                     className={clsx(
-                      'w-full text-left px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center justify-between',
+                      'w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-between',
                       selectedStatus === st.key
                         ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40'
                         : 'bg-slate-800/50 text-slate-300 hover:bg-slate-800',
                     )}
                   >
                     <span>{st.label}</span>
-                    {selectedStatus === st.key && <Check size={15} />}
+                    {selectedStatus === st.key && <Check size={14} />}
                   </button>
                 ))}
               </div>
