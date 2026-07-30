@@ -66,7 +66,7 @@ export default function PaymentPlanCopyPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
 
   // Bottom sheet filter modals for mobile
-  const [activeBottomSheet, setActiveBottomSheet] = useState<'category' | 'status' | null>(null)
+  const [activeBottomSheet, setActiveBottomSheet] = useState<'category' | 'status' | 'account' | null>(null)
 
   // Accordion card expanded state
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -121,12 +121,7 @@ export default function PaymentPlanCopyPage() {
     enabled: !!profile?.family_id,
   })
 
-  // Set default account when accounts arrive
-  useEffect(() => {
-    if (accounts.length > 0 && !selectedAccountId) {
-      setSelectedAccountId(accounts[0].id)
-    }
-  }, [accounts, selectedAccountId])
+
 
   // Category map helper
   const categoryMap = useMemo(() => {
@@ -193,12 +188,7 @@ export default function PaymentPlanCopyPage() {
   // 1-Tap Direct Full Payment from Collapsed Card
   async function handleDirectFullPayment(e: React.MouseEvent, item: MonthlyExpenseItem) {
     e.stopPropagation() // Don't expand/collapse card
-    const accId = selectedAccountId || accounts[0]?.id
-
-    if (!accId) {
-      alert('No hay cuentas configuradas para realizar el pago.')
-      return
-    }
+    const accId = selectedAccountId || null
 
     const totalDue = item.budget_amount + item.arrears_amount
     const remaining = Math.max(totalDue - item.executed_amount_cached - item.deferred_amount, 0)
@@ -213,7 +203,7 @@ export default function PaymentPlanCopyPage() {
       const categoryObj = categoryMap.get(item.category_id)
       const noteLabel = `Pago Total ${conceptObj?.name || categoryObj?.name || 'Obligación'}`
 
-      // 1. Create transaction
+      // 1. Create transaction (source_account_id is null if no account selected)
       const { error: txErr } = await db
         .from('transactions')
         .insert({
@@ -233,11 +223,13 @@ export default function PaymentPlanCopyPage() {
 
       if (txErr) throw txErr
 
-      // 2. Update account balance
-      const accountObj = accounts.find(a => a.id === accId)
-      if (accountObj) {
-        const newBalance = accountObj.current_balance_cached - remaining
-        await db.from('accounts').update({ current_balance_cached: newBalance }).eq('id', accId)
+      // 2. Update account balance ONLY if a specific account was selected
+      if (accId) {
+        const accountObj = accounts.find(a => a.id === accId)
+        if (accountObj) {
+          const newBalance = accountObj.current_balance_cached - remaining
+          await db.from('accounts').update({ current_balance_cached: newBalance }).eq('id', accId)
+        }
       }
 
       // 3. Update expense item executed_amount_cached
@@ -258,10 +250,7 @@ export default function PaymentPlanCopyPage() {
 
   // Submit payment from Expanded View
   async function handleConfirmPayment(item: MonthlyExpenseItem) {
-    if (!selectedAccountId) {
-      setActionMessage({ type: 'error', text: 'Por favor selecciona una cuenta para realizar el pago.' })
-      return
-    }
+    const accId = selectedAccountId || null
 
     const totalDue = item.budget_amount + item.arrears_amount
     const remaining = Math.max(totalDue - item.executed_amount_cached - item.deferred_amount, 0)
@@ -281,7 +270,7 @@ export default function PaymentPlanCopyPage() {
       const categoryObj = categoryMap.get(item.category_id)
       const noteLabel = `Pago ${conceptObj?.name || categoryObj?.name || 'Obligación'}`
 
-      // 1. Create transaction record
+      // 1. Create transaction record (source_account_id is null if no account selected)
       const { error: txErr } = await db
         .from('transactions')
         .insert({
@@ -290,7 +279,7 @@ export default function PaymentPlanCopyPage() {
           type: 'expense',
           amount: amountToPay,
           tax_amount: 0,
-          source_account_id: selectedAccountId,
+          source_account_id: accId,
           category_id: item.category_id,
           concept_id: item.concept_id,
           expense_item_id: item.id,
@@ -301,11 +290,13 @@ export default function PaymentPlanCopyPage() {
 
       if (txErr) throw txErr
 
-      // 2. Update account current_balance_cached
-      const accountObj = accounts.find(a => a.id === selectedAccountId)
-      if (accountObj) {
-        const newBalance = accountObj.current_balance_cached - amountToPay
-        await db.from('accounts').update({ current_balance_cached: newBalance }).eq('id', selectedAccountId)
+      // 2. Update account current_balance_cached ONLY if a specific account was selected
+      if (accId) {
+        const accountObj = accounts.find(a => a.id === accId)
+        if (accountObj) {
+          const newBalance = accountObj.current_balance_cached - amountToPay
+          await db.from('accounts').update({ current_balance_cached: newBalance }).eq('id', accId)
+        }
       }
 
       // 3. Update expense item executed_amount_cached
@@ -411,7 +402,7 @@ export default function PaymentPlanCopyPage() {
               <ChevronDown size={12} className="opacity-70" />
             </button>
 
-            {/* Status / Date Filter Button */}
+            {/* Status Filter Button */}
             <button
               onClick={() => setActiveBottomSheet('status')}
               className={clsx(
@@ -430,6 +421,25 @@ export default function PaymentPlanCopyPage() {
                   : selectedStatus === 'partial'
                   ? '🟡 Parcial'
                   : '🟢 Pagada'}
+              </span>
+              <ChevronDown size={12} className="opacity-70" />
+            </button>
+
+            {/* Account Selector Filter Button */}
+            <button
+              onClick={() => setActiveBottomSheet('account')}
+              className={clsx(
+                'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium border transition-colors flex-shrink-0',
+                selectedAccountId !== ''
+                  ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/50'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-white',
+              )}
+            >
+              <CreditCard size={12} />
+              <span>
+                {selectedAccountId === ''
+                  ? 'Sin cuenta (No descontar)'
+                  : accounts.find(a => a.id === selectedAccountId)?.name || 'Cuenta'}
               </span>
               <ChevronDown size={12} className="opacity-70" />
             </button>
@@ -661,6 +671,7 @@ export default function PaymentPlanCopyPage() {
                               onChange={e => setSelectedAccountId(e.target.value)}
                               className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
                             >
+                              <option value="">Ninguna (Sin descontar de cuenta bancaria)</option>
                               {accounts.map(acc => (
                                 <option key={acc.id} value={acc.id}>
                                   {acc.name} — Saldo: {formatCOP(acc.current_balance_cached)}
@@ -791,6 +802,51 @@ export default function PaymentPlanCopyPage() {
                   >
                     <span>{st.label}</span>
                     {selectedStatus === st.key && <Check size={14} />}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Content for Account Selection Filter */}
+            {activeBottomSheet === 'account' && (
+              <div className="space-y-1">
+                <button
+                  onClick={() => {
+                    setSelectedAccountId('')
+                    setActiveBottomSheet(null)
+                  }}
+                  className={clsx(
+                    'w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-between',
+                    selectedAccountId === ''
+                      ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40'
+                      : 'bg-slate-800/50 text-slate-300 hover:bg-slate-800',
+                  )}
+                >
+                  <div>
+                    <p className="font-semibold">Ninguna (Sin descontar)</p>
+                    <p className="text-[10px] text-slate-400">Registra el pago sin afectar el saldo de ninguna cuenta bancaria</p>
+                  </div>
+                  {selectedAccountId === '' && <Check size={14} />}
+                </button>
+                {accounts.map(acc => (
+                  <button
+                    key={acc.id}
+                    onClick={() => {
+                      setSelectedAccountId(acc.id)
+                      setActiveBottomSheet(null)
+                    }}
+                    className={clsx(
+                      'w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-between',
+                      selectedAccountId === acc.id
+                        ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40'
+                        : 'bg-slate-800/50 text-slate-300 hover:bg-slate-800',
+                    )}
+                  >
+                    <div>
+                      <p className="font-semibold">{acc.name}</p>
+                      <p className="text-[10px] text-slate-400">Saldo: {formatCOP(acc.current_balance_cached)}</p>
+                    </div>
+                    {selectedAccountId === acc.id && <Check size={14} />}
                   </button>
                 ))}
               </div>
