@@ -30,6 +30,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Trash2,
+  Pencil,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -74,6 +76,10 @@ export default function PaymentPlanCopyPage() {
 
   // Accordion card expanded state
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // Inline budget_amount editing state inside expanded card
+  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null)
+  const [editingBudgetVal, setEditingBudgetVal] = useState<number>(0)
 
   // Payment form inside expanded card
   const [payAmountMode, setPayAmountMode] = useState<'full' | 'custom'>('full')
@@ -340,6 +346,46 @@ export default function PaymentPlanCopyPage() {
       setSubmittingItemId(null)
     }
   }
+
+  // Delete item from current month
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await db.from('monthly_expense_items').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expense_items'] })
+      setExpandedId(null)
+    },
+    onError: (err: any) => {
+      alert(err.message || 'Error al eliminar el ítem del plan de pagos.')
+    },
+  })
+
+  function handleDeleteItem(item: MonthlyExpenseItem) {
+    const conceptObj = conceptMap.get(item.concept_id)
+    const categoryObj = categoryMap.get(item.category_id)
+    const title = conceptObj?.name || categoryObj?.name || 'esta obligación'
+
+    if (window.confirm(`¿Estás seguro de eliminar "${title}" del plan de pagos de este mes?`)) {
+      deleteMutation.mutate(item.id)
+    }
+  }
+
+  // Update budget_amount (valor inicial) for an item
+  const updateBudgetMutation = useMutation({
+    mutationFn: async ({ id, newAmount }: { id: string; newAmount: number }) => {
+      const { error } = await db.from('monthly_expense_items').update({ budget_amount: newAmount }).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expense_items'] })
+      setEditingBudgetId(null)
+    },
+    onError: (err: any) => {
+      alert(err.message || 'Error al actualizar el valor inicial del presupuesto.')
+    },
+  })
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-24 lg:pb-10">
@@ -692,12 +738,68 @@ export default function PaymentPlanCopyPage() {
                   {/* Inline Expanded Details (Accordion Inline) */}
                   {isExpanded && (
                     <div className="border-t border-slate-800 bg-slate-900/95 p-2.5 sm:p-3.5 space-y-2.5 animate-fadeIn">
-                      {/* Cifras de Transparencia */}
-                      <div className="grid grid-cols-2 gap-2 bg-slate-950/60 p-2 rounded-lg border border-slate-800/80 text-[10px] sm:text-[11px]">
+                      {/* Cifras de Transparencia (Valor Inicial Editable) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80 text-[10px] sm:text-[11px]">
                         <div>
-                          <p className="text-slate-400">Valor inicial (presupuesto):</p>
-                          <p className="text-slate-200 font-semibold mt-0.5">{formatCOP(totalDue)}</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-slate-400">Valor inicial (presupuesto):</p>
+                            {editingBudgetId !== item.id && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingBudgetId(item.id)
+                                  setEditingBudgetVal(item.budget_amount)
+                                }}
+                                className="text-[10px] text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-0.5"
+                                title="Editar presupuesto inicial"
+                              >
+                                <Pencil size={11} />
+                                <span>Editar</span>
+                              </button>
+                            )}
+                          </div>
+
+                          {editingBudgetId === item.id ? (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <div className="flex-1">
+                                <CurrencyInput
+                                  value={editingBudgetVal}
+                                  onChange={val => setEditingBudgetVal(val)}
+                                  className="w-full bg-slate-800 border border-slate-700 text-white rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                disabled={updateBudgetMutation.isPending}
+                                onClick={() => {
+                                  updateBudgetMutation.mutate({ id: item.id, newAmount: editingBudgetVal })
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white p-1 rounded transition-colors"
+                                title="Guardar valor inicial"
+                              >
+                                <Check size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingBudgetId(null)}
+                                className="bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white p-1 rounded transition-colors"
+                                title="Cancelar"
+                              >
+                                <X size={13} />
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-slate-200 font-semibold mt-0.5">
+                              {formatCOP(item.budget_amount)}
+                              {item.arrears_amount > 0 && (
+                                <span className="text-rose-400 text-[10px] ml-1.5 font-normal">
+                                  (+{formatCOP(item.arrears_amount)} mora)
+                                </span>
+                              )}
+                            </p>
+                          )}
                         </div>
+
                         <div>
                           <p className="text-slate-400">Ya abonado a la fecha:</p>
                           <p className="text-emerald-400 font-semibold mt-0.5">{formatCOP(executed)}</p>
@@ -805,26 +907,39 @@ export default function PaymentPlanCopyPage() {
                       )}
 
                       {/* Action buttons */}
-                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-800">
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-800">
                         <button
                           type="button"
-                          onClick={() => setExpandedId(null)}
-                          className="text-[11px] text-slate-400 hover:text-white font-medium px-2 py-1 rounded-lg transition-colors"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => handleDeleteItem(item)}
+                          className="text-[11px] text-rose-400 hover:text-rose-300 font-medium px-2.5 py-1 rounded-lg border border-rose-500/20 hover:bg-rose-500/10 transition-colors flex items-center gap-1"
+                          title="Eliminar este ítem del plan de pagos del mes"
                         >
-                          Cerrar Detalles
+                          <Trash2 size={13} />
+                          <span>{deleteMutation.isPending ? 'Eliminando...' : 'Eliminar del mes'}</span>
                         </button>
 
-                        {remaining > 0 && (
+                        <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            disabled={isSubmitting}
-                            onClick={() => handleConfirmPayment(item)}
-                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-md shadow-indigo-600/30 flex items-center gap-1 transition-all"
+                            onClick={() => setExpandedId(null)}
+                            className="text-[11px] text-slate-400 hover:text-white font-medium px-2 py-1 rounded-lg transition-colors"
                           >
-                            <span>{isSubmitting ? 'Procesando...' : 'Confirmar Pago'}</span>
-                            <Check size={13} />
+                            Cerrar
                           </button>
-                        )}
+
+                          {remaining > 0 && (
+                            <button
+                              type="button"
+                              disabled={isSubmitting}
+                              onClick={() => handleConfirmPayment(item)}
+                              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg shadow-md shadow-indigo-600/30 flex items-center gap-1 transition-all"
+                            >
+                              <span>{isSubmitting ? 'Procesando...' : 'Confirmar Pago'}</span>
+                              <Check size={13} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
