@@ -533,7 +533,7 @@ export default function PaymentPlanCopyPage() {
                       </span>
                     </div>
 
-                    {/* Bottom Row: Pendiente por pagar + Botón Pagar Total directo + Chevron Toggle */}
+                    {/* Bottom Row: Pendiente por pagar + Botón Marcar Pagado directo + Chevron Toggle */}
                     <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
                       <div>
                         <p className="text-slate-400 text-[10px]">Pendiente por pagar</p>
@@ -541,16 +541,16 @@ export default function PaymentPlanCopyPage() {
                       </div>
 
                       <div className="flex items-center gap-1">
-                        {/* Botón directo de Pagar Total (1-tap sin necesidad de desplegar) */}
+                        {/* Botón directo de Marcar Pagado (1-tap sin necesidad de desplegar) */}
                         {remaining > 0 ? (
                           <button
                             type="button"
                             disabled={isItemSubmitting}
                             onClick={e => handleDirectFullPayment(e, item)}
                             className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-[11px] px-2.5 py-1 rounded-lg shadow-xs shadow-indigo-600/30 flex items-center gap-1 transition-all"
-                            title="Marcar Pago Total directamente"
+                            title="Marcar como Pagado directamente"
                           >
-                            <span>{isItemSubmitting ? 'Pagando...' : 'Pagar Total'}</span>
+                            <span>{isItemSubmitting ? 'Guardando...' : 'Marcar Pagado'}</span>
                             <ArrowUpRight size={13} />
                           </button>
                         ) : (
