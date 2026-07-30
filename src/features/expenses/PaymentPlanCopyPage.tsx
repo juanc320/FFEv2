@@ -27,6 +27,9 @@ import {
   AlertCircle,
   Clock,
   ArrowUpRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -60,13 +63,14 @@ export default function PaymentPlanCopyPage() {
   // Main Tab: 'obligations' (Fixed & Sporadic) or 'envelopes' (Variable)
   const [activeTab, setActiveTab] = useState<'obligations' | 'envelopes'>('obligations')
 
-  // Search & Filter state
+  // Search & Filter & Sort state
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
+  const [dueDateSort, setDueDateSort] = useState<'none' | 'asc' | 'desc'>('none')
 
   // Bottom sheet filter modals for mobile
-  const [activeBottomSheet, setActiveBottomSheet] = useState<'category' | 'status' | 'account' | null>(null)
+  const [activeBottomSheet, setActiveBottomSheet] = useState<'category' | 'status' | 'account' | 'sort' | null>(null)
 
   // Accordion card expanded state
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -138,7 +142,7 @@ export default function PaymentPlanCopyPage() {
 
   // Filter items by Tab, Search, Category, Status
   const filteredItems = useMemo(() => {
-    return items.filter(item => {
+    const list = items.filter(item => {
       // Tab filter
       if (activeTab === 'obligations') {
         if (item.expense_type === 'variable') return false
@@ -169,7 +173,24 @@ export default function PaymentPlanCopyPage() {
 
       return true
     })
-  }, [items, activeTab, selectedCategory, selectedStatus, searchQuery, categoryMap, conceptMap])
+
+    // Sort by Due Date (Ascending or Descending)
+    if (dueDateSort === 'asc') {
+      list.sort((a, b) => {
+        if (!a.due_date) return 1
+        if (!b.due_date) return -1
+        return a.due_date.localeCompare(b.due_date)
+      })
+    } else if (dueDateSort === 'desc') {
+      list.sort((a, b) => {
+        if (!a.due_date) return 1
+        if (!b.due_date) return -1
+        return b.due_date.localeCompare(a.due_date)
+      })
+    }
+
+    return list
+  }, [items, activeTab, selectedCategory, selectedStatus, searchQuery, dueDateSort, categoryMap, conceptMap])
 
   // Toggle card expansion
   function handleCardToggle(item: MonthlyExpenseItem) {
@@ -444,12 +465,40 @@ export default function PaymentPlanCopyPage() {
               <ChevronDown size={12} className="opacity-70" />
             </button>
 
+            {/* Date Sort Filter Button */}
+            <button
+              onClick={() => setActiveBottomSheet('sort')}
+              className={clsx(
+                'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium border transition-colors flex-shrink-0',
+                dueDateSort !== 'none'
+                  ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/50'
+                  : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white',
+              )}
+            >
+              {dueDateSort === 'asc' ? (
+                <ArrowUp size={12} className="text-indigo-400" />
+              ) : dueDateSort === 'desc' ? (
+                <ArrowDown size={12} className="text-indigo-400" />
+              ) : (
+                <ArrowUpDown size={12} />
+              )}
+              <span>
+                {dueDateSort === 'asc'
+                  ? 'Fecha ⬆ (Próximos)'
+                  : dueDateSort === 'desc'
+                  ? 'Fecha ⬇ (Lejanos)'
+                  : 'Orden Fecha'}
+              </span>
+              <ChevronDown size={12} className="opacity-70" />
+            </button>
+
             {/* Reset Filters button if active */}
-            {(selectedCategory !== 'all' || selectedStatus !== 'all' || searchQuery) && (
+            {(selectedCategory !== 'all' || selectedStatus !== 'all' || searchQuery || dueDateSort !== 'none') && (
               <button
                 onClick={() => {
                   setSelectedCategory('all')
                   setSelectedStatus('all')
+                  setDueDateSort('none')
                   setSearchQuery('')
                 }}
                 className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition-colors flex-shrink-0"
@@ -920,6 +969,37 @@ export default function PaymentPlanCopyPage() {
                       <p className="text-[10px] text-slate-400">Saldo: {formatCOP(acc.current_balance_cached)}</p>
                     </div>
                     {selectedAccountId === acc.id && <Check size={14} />}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Content for Date Sort Filter */}
+            {activeBottomSheet === 'sort' && (
+              <div className="space-y-1">
+                {[
+                  { key: 'none', label: 'Predeterminado (Por criticidad)', icon: <ArrowUpDown size={14} /> },
+                  { key: 'asc', label: '📅 Fecha Ascendente (Próximos a vencer primero)', icon: <ArrowUp size={14} /> },
+                  { key: 'desc', label: '📅 Fecha Descendente (Más lejanos a vencer primero)', icon: <ArrowDown size={14} /> },
+                ].map(st => (
+                  <button
+                    key={st.key}
+                    onClick={() => {
+                      setDueDateSort(st.key as any)
+                      setActiveBottomSheet(null)
+                    }}
+                    className={clsx(
+                      'w-full text-left px-3 py-2.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-between',
+                      dueDateSort === st.key
+                        ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40'
+                        : 'bg-slate-800/50 text-slate-300 hover:bg-slate-800',
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      {st.icon}
+                      <span>{st.label}</span>
+                    </div>
+                    {dueDateSort === st.key && <Check size={14} />}
                   </button>
                 ))}
               </div>
