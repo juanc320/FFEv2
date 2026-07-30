@@ -43,10 +43,10 @@ function getObligationStatus(item: MonthlyExpenseItem) {
     return { key: 'postponed', label: 'Pospuesto', dotColor: 'bg-slate-500', textColor: 'text-slate-400', badgeBg: 'bg-slate-800/60 border-slate-700/50' }
   }
   if (executed >= totalDue) {
-    return { key: 'paid', label: 'Pagada', dotColor: 'bg-emerald-500', textColor: 'text-emerald-400', badgeBg: 'bg-emerald-500/10 border-emerald-500/30' }
+    return { key: 'paid', label: 'Pagado', dotColor: 'bg-emerald-500', textColor: 'text-emerald-400', badgeBg: 'bg-emerald-500/10 border-emerald-500/30' }
   }
   if (executed > 0) {
-    return { key: 'partial', label: 'Pagada Parcialmente', dotColor: 'bg-amber-500', textColor: 'text-amber-400', badgeBg: 'bg-amber-500/10 border-amber-500/30' }
+    return { key: 'partial', label: 'Pagado Parcialmente', dotColor: 'bg-amber-500', textColor: 'text-amber-400', badgeBg: 'bg-amber-500/10 border-amber-500/30' }
   }
   return { key: 'pending', label: 'Pendiente', dotColor: 'bg-red-500', textColor: 'text-red-400', badgeBg: 'bg-red-500/10 border-red-500/30' }
 }
@@ -420,7 +420,7 @@ export default function PaymentPlanCopyPage() {
                   ? '🔴 Pendiente'
                   : selectedStatus === 'partial'
                   ? '🟡 Parcial'
-                  : '🟢 Pagada'}
+                  : '🟢 Pagado'}
               </span>
               <ChevronDown size={12} className="opacity-70" />
             </button>
@@ -542,7 +542,7 @@ export default function PaymentPlanCopyPage() {
 
                       <div className="flex items-center gap-1">
                         {/* Botón directo de Marcar Pagado (1-tap sin necesidad de desplegar) */}
-                        {remaining > 0 ? (
+                        {remaining > 0 && (
                           <button
                             type="button"
                             disabled={isItemSubmitting}
@@ -553,10 +553,6 @@ export default function PaymentPlanCopyPage() {
                             <span>{isItemSubmitting ? 'Guardando...' : 'Marcar Pagado'}</span>
                             <ArrowUpRight size={13} />
                           </button>
-                        ) : (
-                          <span className="text-emerald-400 text-[10px] font-medium flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
-                            <CheckCircle2 size={12} /> Pagada
-                          </span>
                         )}
 
                         {/* Chevron toggle para ver u ocultar formulario parcial */}
@@ -784,8 +780,8 @@ export default function PaymentPlanCopyPage() {
                 {[
                   { key: 'all', label: 'Todos los estados' },
                   { key: 'pending', label: '🔴 Pendiente' },
-                  { key: 'partial', label: '🟡 Pagada Parcialmente' },
-                  { key: 'paid', label: '🟢 Pagada' },
+                  { key: 'partial', label: '🟡 Pagado Parcialmente' },
+                  { key: 'paid', label: '🟢 Pagado' },
                 ].map(st => (
                   <button
                     key={st.key}
