@@ -322,8 +322,8 @@ export default function PaymentPlanCopyPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-24 lg:pb-10">
-      {/* Ultra-compact container: px-1 en móvil para máxima área útil casi borde a borde */}
-      <div className="max-w-3xl mx-auto px-1 sm:px-3 pt-1.5 sm:pt-3 space-y-2.5">
+      {/* Contenedor amplio para PC (max-w-6xl) con márgenes equilibrados */}
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 sm:pt-6 space-y-4">
         
         {/* 1. Segmented Control / Toggle Pills (Obligaciones vs. Sobres) */}
         <div className="bg-slate-900/90 p-1 rounded-xl border border-slate-800 flex gap-1 shadow-md backdrop-blur-md">
@@ -359,17 +359,17 @@ export default function PaymentPlanCopyPage() {
           </button>
         </div>
 
-        {/* 2. Filters & Search Bar */}
-        <div className="space-y-1.5">
+        {/* 2. Filters & Search Bar (Horizontal Toolbar en PC) */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           {/* Search box */}
-          <div className="relative">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Buscar obligación o categoría..."
-              className="w-full bg-slate-900/80 border border-slate-800 text-white rounded-xl pl-8 pr-7 py-1.5 text-xs sm:text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+              className="w-full bg-slate-900/80 border border-slate-800 text-white rounded-xl pl-8 pr-7 py-2 text-xs sm:text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
             />
             {searchQuery && (
               <button
@@ -381,8 +381,8 @@ export default function PaymentPlanCopyPage() {
             )}
           </div>
 
-          {/* Quick Filter Chips (Category & Date/Status) */}
-          <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+          {/* Quick Filter Chips (Category & Date/Status & Account) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 sm:pb-0 scrollbar-none flex-shrink-0">
             {/* Category Filter Button */}
             <button
               onClick={() => setActiveBottomSheet('category')}
@@ -499,80 +499,145 @@ export default function PaymentPlanCopyPage() {
                     status.key === 'paid' && !isExpanded && 'opacity-75',
                   )}
                 >
-                  {/* Collapsed Header View: Padding ultra compacto px-2.5 py-2.5 */}
+                  {/* Collapsed Header View: Grilla estructurada de 12 columnas en PC (sm:grid-cols-12), vista compacta en móvil */}
                   <div
                     onClick={() => handleCardToggle(item)}
-                    className="px-2.5 py-2.5 sm:px-3.5 sm:py-3 cursor-pointer space-y-2 select-none"
+                    className="px-3 py-3 sm:px-4 sm:py-3.5 cursor-pointer select-none"
                   >
-                    {/* Top Row: Icon + Full Title (en 2 renglones si es largo) + Status Badge */}
-                    <div className="flex items-start justify-between gap-1.5">
-                      <div className="flex items-start gap-2 min-w-0 flex-1">
-                        <div className="w-7 h-7 rounded-lg bg-slate-800/80 border border-slate-700/80 flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
+                    {/* PC View (sm:grid 12 columnas perfectamente alineadas) */}
+                    <div className="hidden sm:grid sm:grid-cols-12 items-center gap-3 w-full">
+                      {/* Col 1: Icon + Title + Category (4 cols) */}
+                      <div className="col-span-4 flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-slate-800/80 border border-slate-700/80 flex items-center justify-center flex-shrink-0">
+                          <CreditCard className="w-4 h-4 text-indigo-400" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          {/* NOMBRE COMPLETO SIN TRUNCAR */}
-                          <h3 className="text-white font-semibold text-xs sm:text-sm leading-tight break-words whitespace-normal">
+                          <h3 className="text-white font-semibold text-xs sm:text-sm leading-tight truncate" title={title}>
                             {title}
                           </h3>
-                          <p className="text-slate-400 text-[10px] sm:text-[11px] mt-0.5 flex items-center gap-1 flex-wrap">
-                            <span>{categoryObj?.name}</span>
-                            {remaining > 0 && item.due_date && (
-                              <>
-                                <span>•</span>
-                                <span className="text-slate-400 flex items-center gap-0.5">
-                                  <Clock size={10} className="text-slate-500" />
-                                  {`Vence: ${item.due_date}`}
-                                </span>
-                              </>
-                            )}
+                          <p className="text-slate-400 text-[11px] truncate mt-0.5">
+                            {categoryObj?.name || 'Obligación'}
                           </p>
                         </div>
                       </div>
 
-                      {/* Badge de Estado Ultra-Compacto + Chevron Toggle si ya está pagada */}
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <span className={clsx('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border', status.badgeBg)}>
-                          <span className={clsx('w-1 h-1 rounded-full', status.dotColor)} />
-                          <span className={status.textColor}>{status.label}</span>
-                        </span>
+                      {/* Col 2: Vencimiento (2 cols) */}
+                      <div className="col-span-2 text-left">
+                        {remaining > 0 && item.due_date ? (
+                          <div>
+                            <p className="text-slate-500 text-[10px] uppercase font-medium tracking-wider">Vencimiento</p>
+                            <p className="text-slate-300 text-xs font-medium flex items-center gap-1 mt-0.5">
+                              <Clock size={11} className="text-slate-500" />
+                              {item.due_date}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-slate-600 text-xs font-medium">-</span>
+                        )}
+                      </div>
 
-                        {remaining <= 0 && (
-                          <div className="text-slate-400 hover:text-white p-1 rounded-md bg-slate-800/40">
-                            {isExpanded ? <ChevronUp size={15} className="text-indigo-400" /> : <ChevronDown size={15} />}
+                      {/* Col 3: Monto Pendiente (2 cols) */}
+                      <div className="col-span-2 text-right">
+                        {remaining > 0 ? (
+                          <div>
+                            <p className="text-slate-500 text-[10px] uppercase font-medium tracking-wider">Pendiente</p>
+                            <p className="text-white font-bold text-sm tracking-tight">{formatCOP(remaining)}</p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-slate-500 text-[10px] uppercase font-medium tracking-wider">Saldo</p>
+                            <p className="text-slate-400 text-xs font-medium">{formatCOP(0)}</p>
                           </div>
                         )}
                       </div>
-                    </div>
 
-                    {/* Bottom Row: Solo se muestra si aún hay valor pendiente por pagar */}
-                    {remaining > 0 && (
-                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
-                        <div>
-                          <p className="text-slate-400 text-[10px]">Pendiente por pagar</p>
-                          <p className="text-white font-bold text-sm sm:text-base tracking-tight">{formatCOP(remaining)}</p>
-                        </div>
+                      {/* Col 4: Estado Badge (2 cols) */}
+                      <div className="col-span-2 flex justify-center">
+                        <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border flex-shrink-0', status.badgeBg)}>
+                          <span className={clsx('w-1.5 h-1.5 rounded-full', status.dotColor)} />
+                          <span className={status.textColor}>{status.label}</span>
+                        </span>
+                      </div>
 
-                        <div className="flex items-center gap-1">
-                          {/* Botón directo de Marcar Pagado (1-tap sin necesidad de desplegar) */}
+                      {/* Col 5: Acciones -> Botón Marcar Pagado + Chevron (2 cols) */}
+                      <div className="col-span-2 flex items-center justify-end gap-2">
+                        {remaining > 0 && (
                           <button
                             type="button"
                             disabled={isItemSubmitting}
                             onClick={e => handleDirectFullPayment(e, item)}
-                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-[11px] px-2.5 py-1 rounded-lg shadow-xs shadow-indigo-600/30 flex items-center gap-1 transition-all"
+                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-xs shadow-indigo-600/30 flex items-center gap-1 transition-all flex-shrink-0"
                             title="Marcar como Pagado directamente"
                           >
                             <span>{isItemSubmitting ? 'Guardando...' : 'Marcar Pagado'}</span>
                             <ArrowUpRight size={13} />
                           </button>
+                        )}
+                        <div className="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-800/40 border border-slate-700/50 flex-shrink-0">
+                          {isExpanded ? <ChevronUp size={15} className="text-indigo-400" /> : <ChevronDown size={15} />}
+                        </div>
+                      </div>
+                    </div>
 
-                          {/* Chevron toggle para ver u ocultar formulario parcial */}
+                    {/* Mobile View (sm:hidden): Optimizado para toques y thumb-zone */}
+                    <div className="sm:hidden space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          <div className="w-7 h-7 rounded-lg bg-slate-800/80 border border-slate-700/80 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="text-white font-semibold text-xs leading-tight break-words">
+                              {title}
+                            </h3>
+                            <p className="text-slate-400 text-[10px] mt-0.5 flex items-center gap-1 flex-wrap">
+                              <span>{categoryObj?.name || 'Obligación'}</span>
+                              {remaining > 0 && item.due_date && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-slate-400 flex items-center gap-0.5">
+                                    <Clock size={10} className="text-slate-500" />
+                                    {`Vence: ${item.due_date}`}
+                                  </span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Top Right: Status Badge + Chevron Toggle (acceso garantizado y libre de clics accidentales) */}
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <span className={clsx('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border', status.badgeBg)}>
+                            <span className={clsx('w-1 h-1 rounded-full', status.dotColor)} />
+                            <span className={status.textColor}>{status.label}</span>
+                          </span>
                           <div className="text-slate-400 hover:text-white p-1 rounded-md bg-slate-800/40">
-                            {isExpanded ? <ChevronUp size={15} className="text-indigo-400" /> : <ChevronDown size={15} />}
+                            {isExpanded ? <ChevronUp size={14} className="text-indigo-400" /> : <ChevronDown size={14} />}
                           </div>
                         </div>
                       </div>
-                    )}
+
+                      {/* Bottom Row (Solo si hay saldo pendiente): Monto + Botón en zona amplia para el pulgar */}
+                      {remaining > 0 && (
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
+                          <div>
+                            <p className="text-slate-400 text-[10px]">Pendiente por pagar</p>
+                            <p className="text-white font-bold text-sm tracking-tight">{formatCOP(remaining)}</p>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={isItemSubmitting}
+                            onClick={e => handleDirectFullPayment(e, item)}
+                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-[11px] px-3 py-1.5 rounded-lg shadow-xs shadow-indigo-600/30 flex items-center gap-1 transition-all"
+                            title="Marcar como Pagado directamente"
+                          >
+                            <span>{isItemSubmitting ? 'Guardando...' : 'Marcar Pagado'}</span>
+                            <ArrowUpRight size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Inline Expanded Details (Accordion Inline) */}
