@@ -517,32 +517,44 @@ export default function PaymentPlanCopyPage() {
                           </h3>
                           <p className="text-slate-400 text-[10px] sm:text-[11px] mt-0.5 flex items-center gap-1 flex-wrap">
                             <span>{categoryObj?.name}</span>
-                            <span>•</span>
-                            <span className="text-slate-400 flex items-center gap-0.5">
-                              <Clock size={10} className="text-slate-500" />
-                              {item.due_date ? `Vence: ${item.due_date}` : 'Sin fecha'}
-                            </span>
+                            {remaining > 0 && item.due_date && (
+                              <>
+                                <span>•</span>
+                                <span className="text-slate-400 flex items-center gap-0.5">
+                                  <Clock size={10} className="text-slate-500" />
+                                  {`Vence: ${item.due_date}`}
+                                </span>
+                              </>
+                            )}
                           </p>
                         </div>
                       </div>
 
-                      {/* Badge de Estado Ultra-Compacto */}
-                      <span className={clsx('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border flex-shrink-0', status.badgeBg)}>
-                        <span className={clsx('w-1 h-1 rounded-full', status.dotColor)} />
-                        <span className={status.textColor}>{status.label}</span>
-                      </span>
+                      {/* Badge de Estado Ultra-Compacto + Chevron Toggle si ya está pagada */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className={clsx('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border', status.badgeBg)}>
+                          <span className={clsx('w-1 h-1 rounded-full', status.dotColor)} />
+                          <span className={status.textColor}>{status.label}</span>
+                        </span>
+
+                        {remaining <= 0 && (
+                          <div className="text-slate-400 hover:text-white p-1 rounded-md bg-slate-800/40">
+                            {isExpanded ? <ChevronUp size={15} className="text-indigo-400" /> : <ChevronDown size={15} />}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Bottom Row: Pendiente por pagar + Botón Marcar Pagado directo + Chevron Toggle */}
-                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
-                      <div>
-                        <p className="text-slate-400 text-[10px]">Pendiente por pagar</p>
-                        <p className="text-white font-bold text-sm sm:text-base tracking-tight">{formatCOP(remaining)}</p>
-                      </div>
+                    {/* Bottom Row: Solo se muestra si aún hay valor pendiente por pagar */}
+                    {remaining > 0 && (
+                      <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/60">
+                        <div>
+                          <p className="text-slate-400 text-[10px]">Pendiente por pagar</p>
+                          <p className="text-white font-bold text-sm sm:text-base tracking-tight">{formatCOP(remaining)}</p>
+                        </div>
 
-                      <div className="flex items-center gap-1">
-                        {/* Botón directo de Marcar Pagado (1-tap sin necesidad de desplegar) */}
-                        {remaining > 0 && (
+                        <div className="flex items-center gap-1">
+                          {/* Botón directo de Marcar Pagado (1-tap sin necesidad de desplegar) */}
                           <button
                             type="button"
                             disabled={isItemSubmitting}
@@ -553,14 +565,14 @@ export default function PaymentPlanCopyPage() {
                             <span>{isItemSubmitting ? 'Guardando...' : 'Marcar Pagado'}</span>
                             <ArrowUpRight size={13} />
                           </button>
-                        )}
 
-                        {/* Chevron toggle para ver u ocultar formulario parcial */}
-                        <div className="text-slate-400 hover:text-white p-1 rounded-md bg-slate-800/40">
-                          {isExpanded ? <ChevronUp size={15} className="text-indigo-400" /> : <ChevronDown size={15} />}
+                          {/* Chevron toggle para ver u ocultar formulario parcial */}
+                          <div className="text-slate-400 hover:text-white p-1 rounded-md bg-slate-800/40">
+                            {isExpanded ? <ChevronUp size={15} className="text-indigo-400" /> : <ChevronDown size={15} />}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* Inline Expanded Details (Accordion Inline) */}
