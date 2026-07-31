@@ -230,6 +230,32 @@ function useDashboardData() {
 
       const projected = totalBalance + pendingIncome - pendingExpenses
 
+      // Calculate totals for Obligations (Fixed & Sporadic)
+      let totalObligacionesInicial = 0
+      let totalObligacionesPendiente = 0
+
+      obligations.forEach(exp => {
+        const budget = Number(exp.budget_amount) || 0
+        const arr = Number(exp.arrears_amount) || 0
+        const totalItemDue = budget + arr
+        totalObligacionesInicial += totalItemDue
+        totalObligacionesPendiente += Math.max(exp.available, 0)
+      })
+      const totalObligacionesPagado = Math.max(totalObligacionesInicial - totalObligacionesPendiente, 0)
+      const pctObligacionesPagado = totalObligacionesInicial > 0 ? Math.min(Math.round((totalObligacionesPagado / totalObligacionesInicial) * 100), 100) : 0
+
+      // Calculate totals for Envelopes (Variable)
+      let totalSobresInicial = 0
+      let totalSobresDisponible = 0
+
+      envelopes.forEach(env => {
+        const budget = Number(env.budget_amount) || 0
+        totalSobresInicial += budget
+        totalSobresDisponible += Math.max(env.available, 0)
+      })
+      const totalSobresConsumido = Math.max(totalSobresInicial - totalSobresDisponible, 0)
+      const pctSobresConsumido = totalSobresInicial > 0 ? Math.min(Math.round((totalSobresConsumido / totalSobresInicial) * 100), 100) : 0
+
       return {
         month,
         accounts: accountsWithBalance,
@@ -244,7 +270,15 @@ function useDashboardData() {
         envelopes,
         obligations,
         pendingIncomeItems,
-        pendingObligations
+        pendingObligations,
+        totalObligacionesInicial,
+        totalObligacionesPendiente,
+        totalObligacionesPagado,
+        pctObligacionesPagado,
+        totalSobresInicial,
+        totalSobresDisponible,
+        totalSobresConsumido,
+        pctSobresConsumido,
       }
     },
     enabled: !!profile?.family_id
@@ -290,7 +324,9 @@ export default function DashboardPage() {
 
   const {
     month, accounts, totalBalance, pendingIncome, pendingExpenses, arrears, deferred, 
-    projected, envelopes, pendingIncomeItems, pendingObligations
+    projected, envelopes, obligations, pendingIncomeItems, pendingObligations,
+    totalObligacionesInicial, totalObligacionesPendiente, totalObligacionesPagado, pctObligacionesPagado,
+    totalSobresInicial, totalSobresDisponible, totalSobresConsumido, pctSobresConsumido,
   } = data
 
   const isRed = projected < 0
@@ -356,6 +392,101 @@ export default function DashboardPage() {
           to="/expenses"
           state={{ filterSearchQuery: 'pospuesto' }}
         />
+      </div>
+
+      {/* Cuadro Resumen: Totales de Obligaciones vs Sobres */}
+      <div className="card space-y-4 bg-slate-900/90 border border-slate-800 p-5 rounded-2xl shadow-lg">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-bold text-base flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-indigo-400" />
+            <span>Resumen de Gastos: Obligaciones vs. Sobres</span>
+          </h2>
+          <span className="text-xs font-semibold text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700/80">
+            {monthLabel}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Obligaciones */}
+          <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-orange-500/15 text-orange-400 flex items-center justify-center flex-shrink-0">
+                  <Shield size={18} />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-sm">Obligaciones (Fijos y Esporádicos)</h3>
+                  <p className="text-slate-400 text-xs">{obligations.length} ítems programados</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-slate-800/60">
+              <div>
+                <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">Total Inicial</p>
+                <p className="text-white font-bold text-base mt-0.5">{formatCOP(totalObligacionesInicial)}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">Por Pagar</p>
+                <p className="text-rose-400 font-bold text-base mt-0.5">{formatCOP(totalObligacionesPendiente)}</p>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="space-y-1 pt-1">
+              <div className="flex justify-between text-[11px] text-slate-400">
+                <span>Pagado: <strong className="text-emerald-400 font-semibold">{formatCOP(totalObligacionesPagado)}</strong></span>
+                <span>{pctObligacionesPagado}%</span>
+              </div>
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pctObligacionesPagado}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Sobres */}
+          <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/15 text-indigo-400 flex items-center justify-center flex-shrink-0">
+                  <PiggyBank size={18} />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold text-sm">Sobres de Consumo (Variables)</h3>
+                  <p className="text-slate-400 text-xs">{envelopes.length} sobres presupuestados</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2.5 border-t border-slate-800/60">
+              <div>
+                <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">Total Inicial</p>
+                <p className="text-white font-bold text-base mt-0.5">{formatCOP(totalSobresInicial)}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">Por Consumir</p>
+                <p className="text-emerald-400 font-bold text-base mt-0.5">{formatCOP(totalSobresDisponible)}</p>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="space-y-1 pt-1">
+              <div className="flex justify-between text-[11px] text-slate-400">
+                <span>Consumido: <strong className="text-indigo-300 font-semibold">{formatCOP(totalSobresConsumido)}</strong></span>
+                <span>{pctSobresConsumido}%</span>
+              </div>
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-indigo-500 h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pctSobresConsumido}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

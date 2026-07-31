@@ -32,6 +32,7 @@ import {
   ArrowDown,
   Trash2,
   Pencil,
+  GripVertical,
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -51,7 +52,7 @@ function getObligationStatus(item: MonthlyExpenseItem) {
     return { key: 'paid', label: 'Pagado', dotColor: 'bg-emerald-500', textColor: 'text-emerald-400', badgeBg: 'bg-emerald-500/10 border-emerald-500/30' }
   }
   if (executed > 0) {
-    return { key: 'partial', label: 'Pagado Parcialmente', dotColor: 'bg-amber-500', textColor: 'text-amber-400', badgeBg: 'bg-amber-500/10 border-amber-500/30' }
+    return { key: 'partial', label: 'Parcial', dotColor: 'bg-amber-500', textColor: 'text-amber-400', badgeBg: 'bg-amber-500/10 border-amber-500/30' }
   }
   return { key: 'pending', label: 'Pendiente', dotColor: 'bg-red-500', textColor: 'text-red-400', badgeBg: 'bg-red-500/10 border-red-500/30' }
 }
@@ -69,7 +70,60 @@ export default function PaymentPlanCopyPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedStatus, setSelectedStatus] = useState<string>('all')
-  const [dueDateSort, setDueDateSort] = useState<'none' | 'asc' | 'desc'>('none')
+  const [dueDateSort, setDueDateSort] = useState<'auto' | 'asc' | 'desc' | 'none'>('auto')
+
+  // Drag & drop state for custom reordering
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null)
+  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null)
+
+  // Persist custom drag order to Supabase database (synced across all devices)
+  async function saveCustomOrder(newOrderIds: string[]) {
+    try {
+      const updates = newOrderIds.map((id, index) =>
+        db.from('monthly_expense_items').update({ sort_order: index + 1 }).eq('id', id)
+      )
+      await Promise.all(updates)
+      qc.invalidateQueries({ queryKey: ['expense_items'] })
+    } catch (err) {
+      console.error('Error al guardar el orden en la base de datos:', err)
+    }
+  }
+
+  function handleDragStart(e: React.DragEvent, id: string) {
+    setDraggedItemId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }
+
+  function handleDragOver(e: React.DragEvent, id: string) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (draggedItemId && draggedItemId !== id) {
+      setDragOverItemId(id)
+    }
+  }
+
+  async function handleDrop(e: React.DragEvent, targetId: string) {
+    e.preventDefault()
+    setDragOverItemId(null)
+
+    if (!draggedItemId || draggedItemId === targetId) return
+
+    const currentIds = filteredItems.map(i => i.id)
+    const fromIndex = currentIds.indexOf(draggedItemId)
+    const toIndex = currentIds.indexOf(targetId)
+
+    if (fromIndex !== -1 && toIndex !== -1) {
+      const updated = [...currentIds]
+      const [moved] = updated.splice(fromIndex, 1)
+      updated.splice(toIndex, 0, moved)
+
+      await saveCustomOrder(updated)
+      setDueDateSort('auto')
+    }
+
+    setDraggedItemId(null)
+  }
 
   // Bottom sheet filter modals for mobile
   const [activeBottomSheet, setActiveBottomSheet] = useState<'category' | 'status' | 'account' | 'sort' | null>(null)
@@ -180,8 +234,24 @@ export default function PaymentPlanCopyPage() {
       return true
     })
 
-    // Sort by Due Date (Ascending or Descending)
-    if (dueDateSort === 'asc') {
+    // Sort Logic: If 'auto', use DB sort_order if present, otherwise default to due_date asc
+    const hasDbCustomOrder = list.some(item => typeof item.sort_order === 'number' && item.sort_order > 0)
+
+    if (dueDateSort === 'auto') {
+      if (hasDbCustomOrder) {
+        list.sort((a, b) => {
+          const orderA = typeof a.sort_order === 'number' && a.sort_order > 0 ? a.sort_order : 9999
+          const orderB = typeof b.sort_order === 'number' && b.sort_order > 0 ? b.sort_order : 9999
+          return orderA - orderB
+        })
+      } else {
+        list.sort((a, b) => {
+          if (!a.due_date) return 1
+          if (!b.due_date) return -1
+          return a.due_date.localeCompare(b.due_date)
+        })
+      }
+    } else if (dueDateSort === 'asc') {
       list.sort((a, b) => {
         if (!a.due_date) return 1
         if (!b.due_date) return -1
@@ -516,12 +586,14 @@ export default function PaymentPlanCopyPage() {
               onClick={() => setActiveBottomSheet('sort')}
               className={clsx(
                 'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium border transition-colors flex-shrink-0',
-                dueDateSort !== 'none'
+                dueDateSort !== 'auto'
                   ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/50'
                   : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white',
               )}
             >
-              {dueDateSort === 'asc' ? (
+              {dueDateSort === 'auto' ? (
+                <ArrowUp size={12} className="text-indigo-400" />
+              ) : dueDateSort === 'asc' ? (
                 <ArrowUp size={12} className="text-indigo-400" />
               ) : dueDateSort === 'desc' ? (
                 <ArrowDown size={12} className="text-indigo-400" />
@@ -529,7 +601,9 @@ export default function PaymentPlanCopyPage() {
                 <ArrowUpDown size={12} />
               )}
               <span>
-                {dueDateSort === 'asc'
+                {dueDateSort === 'auto'
+                  ? 'Predeterminado'
+                  : dueDateSort === 'asc'
                   ? 'Fecha ⬆ (Próximos)'
                   : dueDateSort === 'desc'
                   ? 'Fecha ⬇ (Lejanos)'
@@ -539,12 +613,12 @@ export default function PaymentPlanCopyPage() {
             </button>
 
             {/* Reset Filters button if active */}
-            {(selectedCategory !== 'all' || selectedStatus !== 'all' || searchQuery || dueDateSort !== 'none') && (
+            {(selectedCategory !== 'all' || selectedStatus !== 'all' || searchQuery || dueDateSort !== 'asc') && (
               <button
                 onClick={() => {
                   setSelectedCategory('all')
                   setSelectedStatus('all')
-                  setDueDateSort('none')
+                  setDueDateSort('asc')
                   setSearchQuery('')
                 }}
                 className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-slate-400 hover:text-rose-400 hover:bg-slate-900 transition-colors flex-shrink-0"
@@ -588,10 +662,20 @@ export default function PaymentPlanCopyPage() {
               return (
                 <div
                   key={item.id}
+                  draggable
+                  onDragStart={e => handleDragStart(e, item.id)}
+                  onDragOver={e => handleDragOver(e, item.id)}
+                  onDrop={e => handleDrop(e, item.id)}
+                  onDragEnd={() => {
+                    setDraggedItemId(null)
+                    setDragOverItemId(null)
+                  }}
                   className={clsx(
                     'bg-slate-900/90 border rounded-xl transition-all duration-200 overflow-hidden shadow-xs',
                     isExpanded ? 'border-indigo-500/50 ring-1 ring-indigo-500/30' : 'border-slate-800/80 hover:border-slate-700',
                     status.key === 'paid' && !isExpanded && 'opacity-75',
+                    dragOverItemId === item.id && 'border-indigo-400 ring-2 ring-indigo-500/50 scale-[1.01]',
+                    draggedItemId === item.id && 'opacity-40 border-dashed border-indigo-400',
                   )}
                 >
                   {/* Collapsed Header View: Grilla estructurada de 12 columnas en PC (sm:grid-cols-12), vista compacta en móvil */}
@@ -599,10 +683,17 @@ export default function PaymentPlanCopyPage() {
                     onClick={() => handleCardToggle(item)}
                     className="px-3 py-3 sm:px-4 sm:py-3.5 cursor-pointer select-none"
                   >
-                    {/* PC View (sm:grid 12 columnas perfectamente alineadas) */}
+                    {/* PC View (sm:grid 12 columnas perfectamente distribuidas: 3-2-2-5) */}
                     <div className="hidden sm:grid sm:grid-cols-12 items-center gap-3 w-full">
-                      {/* Col 1: Icon + Title + Category (4 cols) */}
-                      <div className="col-span-4 flex items-center gap-3 min-w-0">
+                      {/* Col 1: Grip + Icon + Title + Category (3 cols) */}
+                      <div className="col-span-3 flex items-center gap-2.5 min-w-0">
+                        <div
+                          className="cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-300 p-1 rounded transition-colors flex-shrink-0"
+                          title="Arrastrar para reordenar"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <GripVertical size={14} />
+                        </div>
                         <div className="w-8 h-8 rounded-lg bg-slate-800/80 border border-slate-700/80 flex items-center justify-center flex-shrink-0">
                           <CreditCard className="w-4 h-4 text-indigo-400" />
                         </div>
@@ -646,28 +737,26 @@ export default function PaymentPlanCopyPage() {
                         )}
                       </div>
 
-                      {/* Col 4: Estado Badge (2 cols) */}
-                      <div className="col-span-2 flex justify-center">
-                        <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border flex-shrink-0', status.badgeBg)}>
+                      {/* Col 4 & 5: Estado Badge + Botón Marcar Pagado + Chevron (5 cols amplias sin solapamiento) */}
+                      <div className="col-span-5 flex items-center justify-end gap-2.5 min-w-0">
+                        <span className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border flex-shrink-0 whitespace-nowrap', status.badgeBg)}>
                           <span className={clsx('w-1.5 h-1.5 rounded-full', status.dotColor)} />
                           <span className={status.textColor}>{status.label}</span>
                         </span>
-                      </div>
 
-                      {/* Col 5: Acciones -> Botón Marcar Pagado + Chevron (2 cols) */}
-                      <div className="col-span-2 flex items-center justify-end gap-2">
                         {remaining > 0 && (
                           <button
                             type="button"
                             disabled={isItemSubmitting}
                             onClick={e => handleDirectFullPayment(e, item)}
-                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-xs shadow-indigo-600/30 flex items-center gap-1 transition-all flex-shrink-0"
+                            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs px-3 py-1.5 rounded-lg shadow-xs shadow-indigo-600/30 flex items-center gap-1 transition-all flex-shrink-0 whitespace-nowrap"
                             title="Marcar como Pagado directamente"
                           >
                             <span>{isItemSubmitting ? 'Guardando...' : 'Marcar Pagado'}</span>
                             <ArrowUpRight size={13} />
                           </button>
                         )}
+
                         <div className="text-slate-400 hover:text-white p-1.5 rounded-lg bg-slate-800/40 border border-slate-700/50 flex-shrink-0">
                           {isExpanded ? <ChevronUp size={15} className="text-indigo-400" /> : <ChevronDown size={15} />}
                         </div>
@@ -677,7 +766,14 @@ export default function PaymentPlanCopyPage() {
                     {/* Mobile View (sm:hidden): Optimizado para toques y thumb-zone */}
                     <div className="sm:hidden space-y-2">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
+                          <div
+                            className="cursor-grab active:cursor-grabbing text-slate-600 hover:text-slate-300 p-0.5 mt-0.5 flex-shrink-0"
+                            title="Arrastrar para reordenar"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <GripVertical size={14} />
+                          </div>
                           <div className="w-7 h-7 rounded-lg bg-slate-800/80 border border-slate-700/80 flex items-center justify-center flex-shrink-0 mt-0.5">
                             <CreditCard className="w-3.5 h-3.5 text-indigo-400" />
                           </div>
@@ -1093,9 +1189,9 @@ export default function PaymentPlanCopyPage() {
             {activeBottomSheet === 'sort' && (
               <div className="space-y-1">
                 {[
-                  { key: 'none', label: 'Predeterminado (Por criticidad)', icon: <ArrowUpDown size={14} /> },
-                  { key: 'asc', label: '📅 Fecha Ascendente (Próximos a vencer primero)', icon: <ArrowUp size={14} /> },
-                  { key: 'desc', label: '📅 Fecha Descendente (Más lejanos a vencer primero)', icon: <ArrowDown size={14} /> },
+                  { key: 'auto', label: '⭐ Predeterminado (Orden personalizado de la BD o fecha más próxima)', icon: <ArrowUp size={14} /> },
+                  { key: 'asc', label: '📅 Fecha Ascendente (Próximos a vencer)', icon: <ArrowUp size={14} /> },
+                  { key: 'desc', label: '📅 Fecha Descendente (Más lejanos a vencer)', icon: <ArrowDown size={14} /> },
                 ].map(st => (
                   <button
                     key={st.key}
