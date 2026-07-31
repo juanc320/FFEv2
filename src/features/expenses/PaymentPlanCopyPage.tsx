@@ -417,14 +417,37 @@ export default function PaymentPlanCopyPage() {
     }
   }
 
-  // Delete item from current month
+  // Delete item from current month (limpiando transacciones y reasignaciones asociadas)
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // 1. Revertir saldo en cuentas bancarias si hubo transacciones asociadas
+      const { data: itemTxList } = await db.from('transactions').select('*').eq('expense_item_id', id)
+
+      if (itemTxList && itemTxList.length > 0) {
+        for (const tx of itemTxList) {
+          if (tx.source_account_id && Number(tx.amount) > 0) {
+            const { data: accountObj } = await db.from('accounts').select('current_balance_cached').eq('id', tx.source_account_id).maybeSingle()
+            if (accountObj) {
+              const refundedBalance = (Number(accountObj.current_balance_cached) || 0) + Number(tx.amount)
+              await db.from('accounts').update({ current_balance_cached: refundedBalance }).eq('id', tx.source_account_id)
+            }
+          }
+        }
+        // Eliminar las transacciones asociadas
+        await db.from('transactions').delete().eq('expense_item_id', id)
+      }
+
+      // 2. Eliminar reasignaciones presupuestales dependientes
+      await db.from('budget_reallocations').delete().or(`from_expense_item_id.eq.${id},to_expense_item_id.eq.${id}`)
+
+      // 3. Eliminar la obligación / sobre de la tabla principal
       const { error } = await db.from('monthly_expense_items').delete().eq('id', id)
       if (error) throw error
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expense_items'] })
+      qc.invalidateQueries({ queryKey: ['transactions'] })
+      qc.invalidateQueries({ queryKey: ['accounts'] })
       setExpandedId(null)
     },
     onError: (err: any) => {
